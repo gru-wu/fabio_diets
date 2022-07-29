@@ -22,7 +22,7 @@ source("R/footprint_functions.R")
 vers <- "1.1" # or "1.2"
 
 # should results be saved to file?
-write = TRUE
+write = FALSE
 
 # load FABIO data
 Y_food_aut <- readRDS(paste0("data/v",vers,"/Y_food_aut_2013.rds"))
@@ -80,10 +80,6 @@ fp_sq_2013 <- footprint(country = "AUT",  allocation = "value", year = 2013, y =
 fp_eat_2013 <- footprint(country = "AUT",  allocation = "value", year = 2013, y = Y_food_aut$eat_t_pc, X = X, E = E_all)
 fp_epo_2013 <- footprint(country = "AUT",  allocation = "value", year = 2013, y = Y_food_aut$epo_t_pc, X = X, E = E_all)
 
-#######
-# NOTE:
-#for future versions of this script, it will be better to set an lapply here the generates the results/visualizations for each diet, instead of repeating the code for each diet
-######
 
 # add total emission footprints
 fp_sq_2013[, ghg_all := ghg + luh]
@@ -121,6 +117,11 @@ fp_epo_2013_continent_group <- fp_aggregate(fp_epo_2013, aggregate_by = c("conti
 # ---------------- Create Visualizations ---------------
 #-------------------------------------------------------#
 
+diet_names <- c("sq" = "aktuellen Ernährung in Österreich",  "eat" = "EAT-Lancet Diät für Österreich", "epo" = "österreichischen Ernährunspyramide")
+fp_list <- list (fp_)
+
+for (diet in c("sq", "eat", "epo")){
+
 ## footprint map: impacts across the world ---------------------------------------------------------------------
 
 
@@ -133,38 +134,22 @@ world_map <- getMap(resolution = "low") %>%
 # create footprint maps
 
 # land footprint of overall food consumption in AUT
-(fp_map_landuse_sq <- fp_map(fp = fp_sq_2013, map = world_map, indicator = "landuse",
+(fp_map_landuse <- fp_map(fp = fp_sq_2013, map = world_map, indicator = "landuse",
                               origin_items = "ALL", target_items = "ALL",
-                              title = "Pro-Kopf Flächenfußabruck der aktuellen Ernährung in Österreich"))
-(fp_map_landuse_eat <- fp_map(fp = fp_eat_2013, map = world_map, indicator = "landuse",
-                             origin_items = "ALL", target_items = "ALL",
-                             title = "Pro-Kopf Flächenfußabruck der EAT-Lancet Diet für Österreich"))
-(fp_map_landuse_epo <- fp_map(fp = fp_epo_2013, map = world_map, indicator = "landuse",
-                              origin_items = "ALL", target_items = "ALL",
-                              title = "Pro-Kopf Flächenfußabruck der österreichischen Ernährungspyramide"))
+                              title = paste("Pro-Kopf Flächenfußabruck der", diet_names[diet])))
 
-## land footprint of overall Meat consumption in AUT
-#(fp_map_landuse_meat <- fp_map(fp = fp, map = world_map, indicator = "landuse",
-#                               target_groups = "Meat",
-#                               title = "Pro-Kopf Flächenfußabruck des aktuellen Fleischkonsums in Österreich"))
 
 # blue water footprint of overall food consumption in AUT
-(fp_map_blue_sq <- fp_map(fp = fp_sq_2013, map = world_map, indicator = "blue",
+(fp_map_blue <- fp_map(fp = fp_sq_2013, map = world_map, indicator = "blue",
                            origin_items = "ALL", target_items = "ALL",
-                           title = "Pro-Kopf Süßwasserfußabdruck der aktuellen Ernährung in Österreich"))
+                           title = paste("Pro-Kopf Süßwasserfußabdruck der", diet_names[diet])))
 
-(fp_map_blue_eat <- fp_map(fp = fp_eat_2013, map = world_map, indicator = "blue",
-                          origin_items = "ALL", target_items = "ALL",
-                          title = "Pro-Kopf Süßwasserfußabdruck der EAT-Lancet Diet für Österreich"))
 
 # emission footprint of overall food consumption in AUT
-(fp_map_ghg_sq <- fp_map(fp = fp_sq_2013, map = world_map, indicator = "ghg_all",
+(fp_map_ghg <- fp_map(fp = fp_sq_2013, map = world_map, indicator = "ghg_all",
                            origin_items = "ALL", target_items = "ALL",
-                           title = "Pro-Kopf Emissionsfußabruck der aktuellen Ernährung in Österreich"))
+                           title = "Pro-Kopf Emissionsfußabruck der", diet_names[diet])))
 
-(fp_map_ghg_eat <- fp_map(fp = fp_eat_2013, map = world_map, indicator = "ghg_all",
-                         origin_items = "ALL", target_items = "ALL",
-                         title = "Pro-Kopf Emissionsfußabruck der EAT-Lancet Diet für Österreich"))
 
 
 # TODO: standardize legend scales between diets
@@ -181,20 +166,6 @@ if (write) {
 } 
 
 ## mosaic plot -------------------------------------------------------------------------------------------
-
-# this uses the fp_mosaic function from the function library. It has the following arguments:
-
-# fp = the footprint table (can be the raw fp_country table without any aggregation)
-# indicator = the indicator to be plotted
-# per_capita = should results be by capita or aggregate (TRUE/FALSE)
-# target_items = optional, a vector of target items to subset results
-# target_groups = optional, a vector of target commodity groups to subset results
-# divide_by_cells = a factor by which the values displayed in the cells are divided (default 1000)
-# divide_by_axis = a factor by which the values displayed on the x-axis are divided (default 1000000)
-# display_min = a threshold defining the minimum value to be plotted in the cells to avoid overplotting
-# axis_label = character string giving the x-axis label (depends on indicator chose, e.g. "Million hectares")
-# plot_title = character string giving the title of the plot
-# tick_offset = a vector of length 9 offsetting the tick marks on the x-axis. This has to be adapted manually for each plot
 
 # NOTE that the function can so far not add the continent names on the top x-axis like it is done here: https://iopscience.iop.org/article/10.1088/1748-9326/ab07f5
 # this is due to an issue in the used package ggmosaic and will hopefully be resolved soon
