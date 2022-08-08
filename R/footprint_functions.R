@@ -20,7 +20,7 @@
 # allocation = one of "value" or "mass"
 # year = the year of interest
 
-footprint <- function(country = "AUT", consumption = "food", allocation = "value", year = 2013, y, X = X, E = E){
+footprint <- function(country = "AUT", consumption = "food", allocation = "value", year = 2013, y, X = X, E = E, v = vers){
 
   # extract data
   Xi <- X[, as.character(year)]
@@ -28,13 +28,13 @@ footprint <- function(country = "AUT", consumption = "food", allocation = "value
   Ei <- E[[as.character(year)]]
 
   if(allocation == "value") {
-    L <- readRDS(file=paste0("/mnt/nfs_fineprint/tmp/fabio/v1.1/losses/",year,"_L_value.rds"))
+    L <- readRDS(file=paste0("/mnt/nfs_fineprint/tmp/fabio/v",v,"/losses/",year,"_L_value.rds"))
   } else {
-    L <- readRDS(file=paste0("/mnt/nfs_fineprint/tmp/fabio/v1.1/losses/",year,"_L_mass.rds"))
+    L <- readRDS(file=paste0("/mnt/nfs_fineprint/tmp/fabio/v",v,"/losses/",year,"_L_mass.rds"))
   }
 
   # calculate environmental intensities
-  E_int <- Ei[,c("landuse","biomass","blue","green", "ghg", "luh")]
+  E_int <- Ei[,c("landuse","biomass","blue","green","biodiv","n_application","p_application", "ghg", "luh")]
   E_int <- E_int/Xi
   E_int[!is.finite(E_int)] <- 0
   E_int <- cbind(Ei[,1:7], E_int)
@@ -52,7 +52,6 @@ footprint <- function(country = "AUT", consumption = "food", allocation = "value
   FP <- t(t(L) * Y_target)
   colnames(FP) <- rownames(FP) <- short_index <- paste0(index$iso3c, "_", index$item)
   FP <- as(FP, "dgTMatrix")
-
   results <- data.table(origin=rownames(FP)[FP@i + 1], target=colnames(FP)[FP@j + 1], production =FP@x)
   results[,`:=`(country_origin = substr(origin,1,3),
                 item_origin = substr(origin,5,100),
@@ -74,6 +73,9 @@ footprint <- function(country = "AUT", consumption = "food", allocation = "value
                 biomass = production * E_int$biomass[match_origin],
                 blue    = production * E_int$blue[match_origin],
                 green   = production * E_int$green[match_origin],
+                biodiv   = production * E_int$biodiv[match_origin],
+                n_application   = production * E_int$n_application[match_origin],
+                p_application   = production * E_int$p_application[match_origin],
                 ghg     = production * E_int$ghg[match_origin],
                 luh     = production * E_int$luh[match_origin])]
 
@@ -89,7 +91,7 @@ footprint <- function(country = "AUT", consumption = "food", allocation = "value
 
   # reorder columns
   results <- results %>%
-    relocate(c(production, landuse:green), .after = continent_origin) %>%
+    relocate(c(production, landuse:luh), .after = continent_origin) %>%
     relocate(c(iso_origin, continent_origin), .after = country_origin) %>%
     relocate(group_origin, .after = item_origin) %>%
     relocate(group_target, .after = item_target)
@@ -139,7 +141,7 @@ add_per_capita <- function(fp){
 # fp = the footprint data.table
 # aggregate_by = a vector of columns to aggregate results by
 # indicators = indicators to keep (default is all of them)
-fp_aggregate <- function(fp, aggregate_by, indicators = c("landuse", "biomass", "green", "blue", "ghg", "luh")){
+fp_aggregate <- function(fp, aggregate_by, indicators = c("landuse", "biomass", "green", "blue", "ghg", "luh", "biodiv", "n_application", "p_application")){
   indicators <- names(fp)[grep(paste(indicators, collapse = "|"), names(fp))]
   fp <- fp[, lapply(.SD, sum, na.rm=TRUE), by = aggregate_by, .SDcols = indicators]
 }
@@ -196,9 +198,11 @@ fp_map <- function(fp, map = world_map, indicator = "landuse", per_capita = FALS
   world_fp <- left_join(map, fp, by = c("ISO_A3" = "country_origin"))
 
   # set unit for legend
-  indicators_long <-  c("landuse" = "Flächenverbrauch", "biomass" = "Biomasse", "blue" = "Süßwasser- <br>verbrauch", "green" = "Grünes Wasser", "ghg" = "Emissionen", "luh" = "Emissionen", "ghg_all" = "Emissionen")
+  indicators_long <-  c("landuse" = "Flächenverbrauch", "biomass" = "Biomasse", "blue" = "Süßwasser- <br>verbrauch", "green" = "Grünes Wasser", "ghg" = "Emissionen", "luh" = "Emissionen", "ghg_all" = "Emissionen",
+                        "biodiv" = "Biodiversitätsverlust", "n_application" = "Stickstoff", "p_application" = "Phosphor")
   indicator_long <- indicators_long[indicator]
-  units <- c("landuse" = "m<sup>2</sup>", "biomass" = "t", "blue" = "m<sup>3</sup>", "green" = "m<sup>3</sup>", "ghg" = "t CO<sub>2</sub>-eq.", "luh" = "t CO<sub>2</sub>-eq.", "ghg_all" = "t CO<sub>2</sub>-eq.")
+  units <- c("landuse" = "m<sup>2</sup>", "biomass" = "t", "blue" = "m<sup>3</sup>", "green" = "m<sup>3</sup>", "ghg" = "t CO<sub>2</sub>-eq.", "luh" = "t CO<sub>2</sub>-eq.", "ghg_all" = "t CO<sub>2</sub>-eq.",
+             "biodiv" = "10^-6 Spezien", "n_application" = "kg", "p_application" = "kg")
   unit = units[indicator]
 
   if(per_capita) indicator <- paste0(indicator,"_pc")
