@@ -8,7 +8,7 @@ library(Matrix)
 # load data ---------------------------------------
 
 # select fabio version
-vers <- "1.2" # or "1.2"
+vers <- "1.1" # or "1.2"
 
 if (vers == "1.1"){
   eat_conc <- as.data.table(openxlsx::read.xlsx("inst/items_conc.xlsx", sheet = "concordance_1.1"))
