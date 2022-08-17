@@ -38,7 +38,7 @@ items_ghg <- read.csv(paste0("/mnt/nfs_fineprint/tmp/fabio/v",vers,"/gwp_names.c
 items_luh <- read.csv(paste0("/mnt/nfs_fineprint/tmp/fabio/v",vers,"/luh_names.csv"))
 
 # aggregate emission categories
-E_ghg_agg <- lapply(E_ghg, colSums())
+E_ghg_agg <- lapply(E_ghg, colSums)
 E_luh2_agg <- lapply(E_luh, function(x){colSums(x[grep("5 years", items_luh$Element),])})
 
 # bind with E table
@@ -107,15 +107,16 @@ fp_eat_2013 <- merge(fp_eat_2013, items_ger[,.(item, comm_group_ger)], by.x = c(
 fp_epo_2013 <- merge(fp_epo_2013, items_ger[,.(item, comm_group_ger)], by.x = c("item_target"), by.y = c("item"), all.x = TRUE, sort = FALSE)
 
 # save results
-saveRDS(fp_sq_2013, "./plots/fp_sq_2013.rds")
-saveRDS(fp_eat_2013, "./plots/fp_eat_2013.rds")
-saveRDS(fp_epo_2013, "./plots/fp_epo_2013.rds")
+if (write){ 
+  saveRDS(fp_sq_2013, "./plots/fp_sq_2013.rds")
+  saveRDS(fp_eat_2013, "./plots/fp_eat_2013.rds")
+  saveRDS(fp_epo_2013, "./plots/fp_epo_2013.rds")
+}
 
 # aggregate as desired (see function library)
 fp_sq_2013_agg <- fp_aggregate(fp_sq_2013, aggregate_by = c("country_consumer"), indicators = c("landuse", "blue", "ghg", "luh", "ghg_all", "biomass", "biodiv", "n_application", "p_application"))
 fp_eat_2013_agg <- fp_aggregate(fp_eat_2013, aggregate_by = c("country_consumer"), indicators = c("landuse", "blue", "ghg", "luh", "ghg_all", "biomass", "biodiv", "n_application", "p_application"))
 fp_epo_2013_agg <- fp_aggregate(fp_epo_2013, aggregate_by = c("country_consumer"), indicators = c("landuse", "blue", "ghg", "luh", "ghg_all", "biomass", "biodiv", "n_application", "p_application"))
-
 
 fp_sq_2013_agg_crop <- fp_aggregate(fp_sq_2013[group_origin != "Grazing",], aggregate_by = c("country_consumer"), indicators = c("landuse", "blue", "ghg", "luh", "ghg_all", "biomass", "biodiv", "n_application", "p_application"))
 fp_eat_2013_agg_crop <- fp_aggregate(fp_eat_2013[group_origin != "Grazing",], aggregate_by = c("country_consumer"), indicators = c("landuse", "blue", "ghg", "luh", "ghg_all", "biomass", "biodiv", "n_application", "p_application"))
@@ -125,11 +126,18 @@ fp_sq_2013_group  <- fp_aggregate(fp_sq_2013, aggregate_by = c("country_consumer
 fp_eat_2013_group <- fp_aggregate(fp_eat_2013, aggregate_by = c("country_consumer", "comm_group_ger"), indicators = c("landuse", "blue", "ghg", "luh", "ghg_all", "biomass", "biodiv", "n_application", "p_application"))
 fp_epo_2013_group <- fp_aggregate(fp_epo_2013, aggregate_by = c("country_consumer", "comm_group_ger"), indicators = c("landuse", "blue", "ghg", "luh", "ghg_all", "biomass", "biodiv", "n_application", "p_application"))
 
-fp_sq_2013_continent_group <- fp_aggregate(fp_sq_2013, aggregate_by = c("continent_origin", "comm_group_ger"), indicators = c("landuse", "blue", "ghg", "luh", "ghg_all", "biomass", "biodiv", "n_application", "p_application"))
+fp_sq_2013_continent_group <- fp_aggregate(fp_sq_2013, aggregate_by = c("continent_origin"), indicators = c("landuse", "blue", "ghg", "luh", "ghg_all", "biomass", "biodiv", "n_application", "p_application"))
 fp_eat_2013_continent_group <- fp_aggregate(fp_eat_2013, aggregate_by = c("continent_origin", "comm_group_ger"), indicators = c("landuse", "blue", "ghg", "luh", "ghg_all", "biomass", "biodiv", "n_application", "p_application"))
 fp_epo_2013_continent_group <- fp_aggregate(fp_epo_2013, aggregate_by = c("continent_origin", "comm_group_ger"), indicators = c("landuse", "blue", "ghg", "luh", "ghg_all", "biomass", "biodiv", "n_application", "p_application"))
 
+fp_sq_2013_country <- fp_aggregate(fp_sq_2013, aggregate_by = c("country_consumer", "country_origin"), indicators = c("landuse", "blue", "ghg", "luh", "ghg_all", "biomass", "biodiv", "n_application", "p_application"))
+fp_eat_2013_country <- fp_aggregate(fp_eat_2013, aggregate_by = c("country_consumer", "country_origin"), indicators = c("landuse", "blue", "ghg", "luh", "ghg_all", "biomass", "biodiv", "n_application", "p_application"))
+fp_epo_2013_country <- fp_aggregate(fp_epo_2013, aggregate_by = c("country_consumer", "country_origin"), indicators = c("landuse", "blue", "ghg", "luh", "ghg_all", "biomass", "biodiv", "n_application", "p_application"))
 
+fp_limits <- rbind(fp_sq_2013_country, fp_eat_2013_country, fp_epo_2013_country) %>% 
+                        filter(country_origin != "AUT") %>% 
+                        group_by(country_consumer) %>% 
+                        summarise(across(landuse:ghg_all, max))
 
 #-------------------------------------------------------#
 # ---------------- Create Visualizations ---------------
@@ -148,13 +156,13 @@ world_map <- getMap(resolution = "low") %>%
 
 # land footprint of overall food consumption in AUT
 (fp_map_landuse_sq <- fp_map(fp = fp_sq_2013[fp_sq_2013$country_origin != "AUT"], map = world_map, indicator = "landuse",
-                              origin_items = "ALL", target_items = "ALL",
+                              origin_items = "ALL", target_items = "ALL", limits = c(0, fp_limits$landuse),
                               title = "Pro-Kopf Flächenfußabruck der aktuellen Ernährung in Österreich"))
 (fp_map_landuse_eat <- fp_map(fp = fp_eat_2013[fp_eat_2013$country_origin != "AUT"], map = world_map, indicator = "landuse",
-                             origin_items = "ALL", target_items = "ALL",
-                             title = "Pro-Kopf Flächenfußabruck der EAT-Lancet Diet für Österreich"))
+                             origin_items = "ALL", target_items = "ALL", limits = c(0, fp_limits$landuse),
+                             title = "Pro-Kopf Flächenfußabruck der Planetary Health Diet für Österreich"))
 (fp_map_landuse_epo <- fp_map(fp = fp_epo_2013[fp_epo_2013$country_origin != "AUT"], map = world_map, indicator = "landuse",
-                              origin_items = "ALL", target_items = "ALL",
+                              origin_items = "ALL", target_items = "ALL", limits = c(0, fp_limits$landuse),
                               title = "Pro-Kopf Flächenfußabruck der österreichischen Ernährungspyramide"))
 
 ## land footprint of overall Meat consumption in AUT
@@ -162,63 +170,63 @@ world_map <- getMap(resolution = "low") %>%
 #                               target_groups = "Meat",
 #                               title = "Pro-Kopf Flächenfußabruck des aktuellen Fleischkonsums in Österreich"))
 
-# blue water footprint of overall food consumption in AUT
+# blue water footprint
 (fp_map_blue_sq <- fp_map(fp = fp_sq_2013[fp_sq_2013$country_origin != "AUT"], map = world_map, indicator = "blue",
-                           origin_items = "ALL", target_items = "ALL",
+                           origin_items = "ALL", target_items = "ALL",  limits = c(0, fp_limits$blue),
                            title = "Pro-Kopf Süßwasserfußabdruck der aktuellen Ernährung in Österreich"))
 
 (fp_map_blue_eat <- fp_map(fp = fp_eat_2013[fp_eat_2013$country_origin != "AUT"], map = world_map, indicator = "blue",
-                          origin_items = "ALL", target_items = "ALL",
-                          title = "Pro-Kopf Süßwasserfußabdruck der EAT-Lancet Diet für Österreich"))
+                          origin_items = "ALL", target_items = "ALL", limits = c(0, fp_limits$blue),
+                          title = "Pro-Kopf Süßwasserfußabdruck der Planetary Health Diet für Österreich"))
 
 (fp_map_blue_epo <- fp_map(fp = fp_epo_2013[fp_epo_2013$country_origin != "AUT"], map = world_map, indicator = "blue",
-                           origin_items = "ALL", target_items = "ALL",
+                           origin_items = "ALL", target_items = "ALL", limits = c(0, fp_limits$blue),
                            title = "Pro-Kopf Süßwasserfußabdruck der österreichischen Ernährungspyramide"))
 
-# emission footprint of overall food consumption in AUT
+# emission footprint
 (fp_map_ghg_sq <- fp_map(fp = fp_sq_2013[fp_sq_2013$country_origin != "AUT"], map = world_map, indicator = "ghg_all",
-                           origin_items = "ALL", target_items = "ALL",
+                           origin_items = "ALL", target_items = "ALL", limits = c(0, fp_limits$ghg_all),
                            title = "Pro-Kopf Emissionsfußabruck der aktuellen Ernährung in Österreich"))
 
 (fp_map_ghg_eat <- fp_map(fp = fp_eat_2013[fp_eat_2013$country_origin != "AUT"], map = world_map, indicator = "ghg_all",
-                         origin_items = "ALL", target_items = "ALL",
-                         title = "Pro-Kopf Emissionsfußabruck der EAT-Lancet Diet für Österreich"))
+                         origin_items = "ALL", target_items = "ALL", limits = c(0, fp_limits$ghg_all),
+                         title = "Pro-Kopf Emissionsfußabruck der Planetary Health Diet für Österreich"))
 
 (fp_map_ghg_epo <- fp_map(fp = fp_epo_2013[fp_epo_2013$country_origin != "AUT"], map = world_map, indicator = "ghg_all",
-                          origin_items = "ALL", target_items = "ALL",
+                          origin_items = "ALL", target_items = "ALL", limits = c(0, fp_limits$ghg_all),
                           title = "Pro-Kopf Emissionsfußabruck der österreichischen Ernährungspyramide"))
 
-# emission footprint of overall food consumption in AUT
+# biodiversity footprint
 (fp_map_biodiv_sq <- fp_map(fp = fp_sq_2013[fp_sq_2013$country_origin != "AUT"], map = world_map, indicator = "biodiv",
-                         origin_items = "ALL", target_items = "ALL",
+                         origin_items = "ALL", target_items = "ALL", limits = c(0, fp_limits$biodiv),
                          title = "Pro-Kopf Biodiversitätsfußabdruck der aktuellen Ernährung in Österreich"))
 (fp_map_biodiv_eat <- fp_map(fp = fp_eat_2013[fp_eat_2013$country_origin != "AUT"], map = world_map, indicator = "biodiv",
-                          origin_items = "ALL", target_items = "ALL",
-                          title = "Pro-Kopf Biodiversitätsfußabdruck der EAT-Lancet Diet für Österreich"))
+                          origin_items = "ALL", target_items = "ALL", limits = c(0, fp_limits$biodiv),
+                          title = "Pro-Kopf Biodiversitätsfußabdruck der Planetary Health Diet für Österreich"))
 (fp_map_biodiv_epo <- fp_map(fp = fp_epo_2013[fp_epo_2013$country_origin != "AUT"], map = world_map, indicator = "biodiv",
-                          origin_items = "ALL", target_items = "ALL",
+                          origin_items = "ALL", target_items = "ALL", limits = c(0, fp_limits$biodiv),
                           title = "Pro-Kopf Biodiversitätsfußabdruck der österreichischen Ernährungspyramide"))
 
-# emission footprint of overall food consumption in AUT
+# nitrogen footprint 
 (fp_map_n_sq <- fp_map(fp = fp_sq_2013[fp_sq_2013$country_origin != "AUT"], map = world_map, indicator = "n_application",
-                            origin_items = "ALL", target_items = "ALL",
+                            origin_items = "ALL", target_items = "ALL", limits = c(0, fp_limits$n_application),
                             title = "Pro-Kopf Stickstoffeinsatz der aktuellen Ernährung in Österreich"))
 (fp_map_n_eat <- fp_map(fp = fp_eat_2013[fp_eat_2013$country_origin != "AUT"], map = world_map, indicator = "n_application",
-                             origin_items = "ALL", target_items = "ALL",
-                             title = "Pro-Kopf Stickstoffeinsatz der EAT-Lancet Diet für Österreich"))
+                             origin_items = "ALL", target_items = "ALL", limits = c(0, fp_limits$n_application),
+                             title = "Pro-Kopf Stickstoffeinsatz der Planetary Health Diet für Österreich"))
 (fp_map_n_epo <- fp_map(fp = fp_epo_2013[fp_epo_2013$country_origin != "AUT"], map = world_map, indicator = "n_application",
-                             origin_items = "ALL", target_items = "ALL",
+                             origin_items = "ALL", target_items = "ALL", limits = c(0, fp_limits$n_application),
                              title = "Pro-Kopf Stickstoffeinsatz der österreichischen Ernährungspyramide"))
 
-# emission footprint of overall food consumption in AUT
+# phosphorous footprint of overall food consumption in AUT
 (fp_map_p_sq <- fp_map(fp = fp_sq_2013[fp_sq_2013$country_origin != "AUT"], map = world_map, indicator = "p_application",
-                       origin_items = "ALL", target_items = "ALL",
+                       origin_items = "ALL", target_items = "ALL", limits = c(0, fp_limits$p_application),
                        title = "Pro-Kopf Phosphoreinsatz der aktuellen Ernährung in Österreich"))
 (fp_map_p_eat <- fp_map(fp = fp_eat_2013[fp_eat_2013$country_origin != "AUT"], map = world_map, indicator = "p_application",
-                        origin_items = "ALL", target_items = "ALL",
-                        title = "Pro-Kopf Phosphoreinsatz der EAT-Lancet Diet für Österreich"))
+                        origin_items = "ALL", target_items = "ALL", limits = c(0, fp_limits$p_application),
+                        title = "Pro-Kopf Phosphoreinsatz der Planetary Health Diet für Österreich"))
 (fp_map_p_epo <- fp_map(fp = fp_epo_2013[fp_epo_2013$country_origin != "AUT"], map = world_map, indicator = "p_application",
-                        origin_items = "ALL", target_items = "ALL",
+                        origin_items = "ALL", target_items = "ALL", limits = c(0, fp_limits$p_application),
                         title = "Pro-Kopf Phosphoreinsatz der österreichischen Ernährungspyramide"))
 
 
@@ -288,9 +296,9 @@ if (write) {
 
 # save plot to png
 if (write){
-ggsave("plots/mosaic_land_sq.png", mosaic_land_sq, width = 25, height = 15, units = "cm")
-ggsave("plots/mosaic_land_eat.png", mosaic_land_eat, width = 25, height = 15, units = "cm")
-ggsave("plots/mosaic_land_epo.png", mosaic_land_epo, width = 25, height = 15, units = "cm")
+  ggsave("plots/mosaic_land_sq.png", mosaic_land_sq, width = 25, height = 15, units = "cm")
+  ggsave("plots/mosaic_land_eat.png", mosaic_land_eat, width = 25, height = 15, units = "cm")
+  ggsave("plots/mosaic_land_epo.png", mosaic_land_epo, width = 25, height = 15, units = "cm")
 }
 
 # Water --------------------------------
@@ -314,9 +322,9 @@ ggsave("plots/mosaic_land_epo.png", mosaic_land_epo, width = 25, height = 15, un
 
 # save plot to png
 if (write) {
-ggsave("plots/mosaic_water_sq.png", mosaic_water_sq, width = 25, height = 15, units = "cm")
-ggsave("plots/mosaic_water_eat.png", mosaic_water_eat, width = 25, height = 15, units = "cm")
-ggsave("plots/mosaic_water_epo.png", mosaic_water_epo, width = 25, height = 15, units = "cm")
+  ggsave("plots/mosaic_water_sq.png", mosaic_water_sq, width = 25, height = 15, units = "cm")
+  ggsave("plots/mosaic_water_eat.png", mosaic_water_eat, width = 25, height = 15, units = "cm")
+  ggsave("plots/mosaic_water_epo.png", mosaic_water_epo, width = 25, height = 15, units = "cm")
 }
 
 # GHG --------------------------------
@@ -339,9 +347,9 @@ ggsave("plots/mosaic_water_epo.png", mosaic_water_epo, width = 25, height = 15, 
                              tick_offset = c(0,-0.0033,-0.006,-0.006,-0.004,-0.004,-0.002,-0.001,-0.001)))
 # save plot to png
 if (write) {
-ggsave("plots/mosaic_ghg_sq.png", mosaic_ghg_sq, width = 25, height = 15, units = "cm")
-ggsave("plots/mosaic_ghg_eat.png", mosaic_ghg_eat, width = 25, height = 15, units = "cm")
-ggsave("plots/mosaic_ghg_epo.png", mosaic_ghg_epo, width = 25, height = 15, units = "cm")
+  ggsave("plots/mosaic_ghg_sq.png", mosaic_ghg_sq, width = 25, height = 15, units = "cm")
+  ggsave("plots/mosaic_ghg_eat.png", mosaic_ghg_eat, width = 25, height = 15, units = "cm")
+  ggsave("plots/mosaic_ghg_epo.png", mosaic_ghg_epo, width = 25, height = 15, units = "cm")
 }
 
 # Biodiversity --------------------------------
@@ -429,7 +437,7 @@ Y_agg_long <- Y_agg %>%
   rename_with(~gsub("_g_pc_day_net", "", .x, fixed = TRUE)) %>%
   pivot_longer(names_to = "diet", cols = c(food:epo), values_to = "g_pc_day") %>%
   filter(g_pc_day > 0) %>%
-  mutate(diet_lab = ifelse(diet == "food", "Status Quo", ifelse(diet == "eat", "EAT Lancet", "Ernährungspyramide")))
+  mutate(diet_lab = ifelse(diet == "food", "Status Quo", ifelse(diet == "eat", "Planetary Health Diet", "Ernährungspyramide")))
 
 food_cols_vect_sel <- food_cols_vect[names(food_cols_vect) %in% unique(Y_agg_long$comm_group_ger)]
 
@@ -444,7 +452,7 @@ food_cols_vect_sel <- food_cols_vect[names(food_cols_vect) %in% unique(Y_agg_lon
         axis.text.y = element_text(face = "bold", size = 10)))
 
 if (write) {
-ggsave(filename = "plots/diet_plot.png", diet_plot, width = 12, height = 3.5)
+  ggsave(filename = "plots/diet_plot.png", diet_plot, width = 12, height = 3.5)
 }
 
 
@@ -515,6 +523,6 @@ fp_agg_land$diet <- factor(c("Status \nQuo", "EAT \nLancet", "Ernährungs- \npyr
 (pb_bar <- pb_bar_land + pb_bar_water + pb_bar_ghg + pb_bar_biodiv + pb_bar_n + pb_bar_p)
 
 if (write) {
-ggsave("plots/pb_bar.png", pb_bar, width = 15, height = 12, units = "cm")
+  ggsave("plots/pb_bar.png", pb_bar, width = 15, height = 12, units = "cm")
 }
 
