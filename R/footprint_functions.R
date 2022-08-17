@@ -172,7 +172,7 @@ is.finite.data.frame <- function(x) do.call(cbind, lapply(x, is.finite))
 
 
 fp_map <- function(fp, map = world_map, indicator = "landuse", per_capita = FALSE,
-                   origin_items = "ALL", target_items = "ALL", origin_groups, target_groups, title = ""){
+                   origin_items = "ALL", target_items = "ALL", origin_groups, target_groups, title = "", ...){
 
   # extract and aggregate accorging to input
   if (!missing(origin_groups)){
@@ -211,7 +211,7 @@ fp_map <- function(fp, map = world_map, indicator = "landuse", per_capita = FALS
   ggplot(data = world_fp) +
     geom_sf(aes(fill = .data[[indicator]]), size = 0.05) +
     labs(fill=paste(indicator_long, " <br> in", unit), title = title) +
-    scale_fill_viridis_c(direction = -1, na.value = "lightgrey") +
+    scale_fill_viridis_c(direction = -1, na.value = "lightgrey", ...) +
     coord_sf(crs = "+proj=robin") + # "+proj=moll"   "+proj=wintri"
     theme_map() +
     theme(plot.title = element_text(hjust = 0.5), plot.title.position = "plot", legend.title = element_markdown()) #legend.position = "right"
@@ -242,7 +242,8 @@ fp_mosaic <- function(fp, indicator, per_captia = FALSE, consumer_country = "AUT
                       divide_by_cells = 1000, divide_by_axis = 1000000, axis_label = "Million hectares",
                       display_min = 10, round_digs = 0,
                       plot_title = "Land-use footprint by origin country and commodity group",
-                      tick_offset = c(0)) {
+                      tick_offset = c(0), 
+                      row = c("ROW", "OCE")) {
 
 
   # if target item or group was given, filter the fp table accordingly
@@ -251,6 +252,7 @@ fp_mosaic <- function(fp, indicator, per_captia = FALSE, consumer_country = "AUT
   if(!missing(target_groups)) fp <- fp[group_target %in% target_groups,]
 
   # aggregate data for mosaic format
+  fp[continent_origin %in% row, continent_origin := "ROW"]
   fp_mosaic <- fp_aggregate(fp, aggregate_by = aggregate_by)
   setnames(fp_mosaic, aggregate_by, c("group", "region"))
 
@@ -265,8 +267,13 @@ fp_mosaic <- function(fp, indicator, per_captia = FALSE, consumer_country = "AUT
   fp_mosaic <- fp_mosaic[value > 0,]
 
   mycols <- food_cols_vect[names(food_cols_vect) %in% unique(fp_mosaic$group)]
+  region_levels <- c(consumer_country, "EU", "EUR", "ASI", "AFR", "LAM", "NAM", "OCE", "ROW")
+  region_levels <- region_levels[!region_levels %in% row[row != "ROW"]]
   fp_mosaic[,`:=` (group = factor(group, levels = names(mycols)),
-                   region = factor(region, levels = c(consumer_country, "EU", "EUR", "ASI", "AFR", "LAM", "NAM", "OCE", "ROW")))]
+                   region = factor(region, levels = region_levels))]
+  
+  cat("\n region order from left to right:", region_levels) 
+  if (length(row) > 1)  cat("\n", row[row != "ROW"], ifelse(length(row) > 2, paste("are"), paste("is")), "added to ROW via the 'row' argument \n")
 
 
   #mycols=c("dodgerblue2", "#E31A1C", "green4", "#6A3D9A", "#FF7F00", "black",
