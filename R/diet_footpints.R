@@ -64,6 +64,7 @@ index <- data.table(area_code = rep(regions$code, each = nrcom),
 
 # German group names
 items_ger <- as.data.table(openxlsx::read.xlsx("inst/items_conc.xlsx", sheet = ifelse(vers == "1.1", "items_german_1.1", "items_german")))
+Y_food_aut <- merge(Y_food_aut, items_ger[,.(item_code,comm_group_ger)], by = c("item_code"), all.x = TRUE, sort = TRUE)
 
 # colors for food groups
 food_cols <- openxlsx::read.xlsx("inst/items_conc.xlsx", sheet = "colors", colNames = FALSE)
@@ -81,10 +82,10 @@ fp_eat_2013 <- footprint(country = "AUT",  allocation = "value", year = 2013, y 
 fp_epo_2013 <- footprint(country = "AUT",  allocation = "value", year = 2013, y = Y_food_aut$epo_t_pc, X = X, E = E_all, v = vers)
 
 
-#######
+#######.
 # NOTE:
 #for future versions of this script, it will be better to set an lapply here the generates the results/visualizations for each diet, instead of repeating the code for each diet
-######
+######.
 
 # add total emission footprints
 fp_sq_2013[, ghg_all := ghg + luh]
@@ -143,7 +144,7 @@ fp_limits <- rbind(fp_sq_2013_country, fp_eat_2013_country, fp_epo_2013_country)
 # ---------------- Create Visualizations ---------------
 #-------------------------------------------------------#
 
-## footprint map: impacts across the world ---------------------------------------------------------------------
+## Footprint map: impacts across the world ---------------------------------------------------------------------
 
 
 # load world map shapefile
@@ -153,6 +154,8 @@ world_map <- getMap(resolution = "low") %>%
   dplyr::select(ADMIN, ADM0_A3, ISO_A3, REGION, continent)
 
 # create footprint maps
+
+### Cropland ------
 
 # land footprint of overall food consumption in AUT
 (fp_map_landuse_sq <- fp_map(fp = fp_sq_2013[fp_sq_2013$country_origin != "AUT"], map = world_map, indicator = "landuse",
@@ -170,7 +173,7 @@ world_map <- getMap(resolution = "low") %>%
 #                               target_groups = "Meat",
 #                               title = "Pro-Kopf Flächenfußabruck des aktuellen Fleischkonsums in Österreich"))
 
-# blue water footprint
+### Water ------
 (fp_map_blue_sq <- fp_map(fp = fp_sq_2013[fp_sq_2013$country_origin != "AUT"], map = world_map, indicator = "blue",
                            origin_items = "ALL", target_items = "ALL",  limits = c(0, fp_limits$blue),
                            title = "Pro-Kopf Süßwasserfußabdruck der aktuellen Ernährung in Österreich"))
@@ -196,7 +199,7 @@ world_map <- getMap(resolution = "low") %>%
                           origin_items = "ALL", target_items = "ALL", limits = c(0, fp_limits$ghg_all),
                           title = "Pro-Kopf Emissionsfußabruck der österreichischen Ernährungspyramide"))
 
-# biodiversity footprint
+### Biodiversity ------
 (fp_map_biodiv_sq <- fp_map(fp = fp_sq_2013[fp_sq_2013$country_origin != "AUT"], map = world_map, indicator = "biodiv",
                          origin_items = "ALL", target_items = "ALL", limits = c(0, fp_limits$biodiv),
                          title = "Pro-Kopf Biodiversitätsfußabdruck der aktuellen Ernährung in Österreich"))
@@ -207,7 +210,7 @@ world_map <- getMap(resolution = "low") %>%
                           origin_items = "ALL", target_items = "ALL", limits = c(0, fp_limits$biodiv),
                           title = "Pro-Kopf Biodiversitätsfußabdruck der österreichischen Ernährungspyramide"))
 
-# nitrogen footprint 
+### N application ------
 (fp_map_n_sq <- fp_map(fp = fp_sq_2013[fp_sq_2013$country_origin != "AUT"], map = world_map, indicator = "n_application",
                             origin_items = "ALL", target_items = "ALL", limits = c(0, fp_limits$n_application),
                             title = "Pro-Kopf Stickstoffeinsatz der aktuellen Ernährung in Österreich"))
@@ -218,7 +221,7 @@ world_map <- getMap(resolution = "low") %>%
                              origin_items = "ALL", target_items = "ALL", limits = c(0, fp_limits$n_application),
                              title = "Pro-Kopf Stickstoffeinsatz der österreichischen Ernährungspyramide"))
 
-# phosphorous footprint of overall food consumption in AUT
+### P application ------
 (fp_map_p_sq <- fp_map(fp = fp_sq_2013[fp_sq_2013$country_origin != "AUT"], map = world_map, indicator = "p_application",
                        origin_items = "ALL", target_items = "ALL", limits = c(0, fp_limits$p_application),
                        title = "Pro-Kopf Phosphoreinsatz der aktuellen Ernährung in Österreich"))
@@ -229,34 +232,33 @@ world_map <- getMap(resolution = "low") %>%
                         origin_items = "ALL", target_items = "ALL", limits = c(0, fp_limits$p_application),
                         title = "Pro-Kopf Phosphoreinsatz der österreichischen Ernährungspyramide"))
 
-
-# TODO: standardize legend scales between diets
+### save maps ------------
 
 if (write) {
-# save maps to png
-  ggsave("plots/fp_map_land_sq.png", fp_map_landuse_sq, width = 15, height = 10, units = "cm")
-  ggsave("plots/fp_map_water_sq.png", fp_map_blue_sq, width = 15, height = 10, units = "cm")
-  ggsave("plots/fp_map_ghg_sq.png", fp_map_ghg_sq, width = 15, height = 10, units = "cm")
-  ggsave("plots/fp_map_biodiv_sq.png", fp_map_biodiv_sq, width = 15, height = 10, units = "cm")
-  ggsave("plots/fp_map_n_sq.png", fp_map_n_sq, width = 15, height = 10, units = "cm")
-  ggsave("plots/fp_map_p_sq.png", fp_map_p_sq, width = 15, height = 10, units = "cm")
+  ggsave("plots/map/map_land_sq.png", fp_map_landuse_sq, width = 15, height = 10, units = "cm")
+  ggsave("plots/map/map_water_sq.png", fp_map_blue_sq, width = 15, height = 10, units = "cm")
+  ggsave("plots/map/map_ghg_sq.png", fp_map_ghg_sq, width = 15, height = 10, units = "cm")
+  ggsave("plots/map/map_biodiv_sq.png", fp_map_biodiv_sq, width = 15, height = 10, units = "cm")
+  ggsave("plots/map/map_n_sq.png", fp_map_n_sq, width = 15, height = 10, units = "cm")
+  ggsave("plots/map/map_p_sq.png", fp_map_p_sq, width = 15, height = 10, units = "cm")
   
-  ggsave("plots/fp_map_land_eat.png", fp_map_landuse_eat, width = 15, height = 10, units = "cm")
-  ggsave("plots/fp_map_water_eat.png", fp_map_blue_eat, width = 15, height = 10, units = "cm")
-  ggsave("plots/fp_map_ghg_eat.png", fp_map_ghg_eat, width = 15, height = 10, units = "cm")
-  ggsave("plots/fp_map_biodiv_eat.png", fp_map_biodiv_eat, width = 15, height = 10, units = "cm")
-  ggsave("plots/fp_map_n_eat.png", fp_map_n_eat, width = 15, height = 10, units = "cm")
-  ggsave("plots/fp_map_p_eat.png", fp_map_p_eat, width = 15, height = 10, units = "cm")
+  ggsave("plots/map/map_land_eat.png", fp_map_landuse_eat, width = 15, height = 10, units = "cm")
+  ggsave("plots/map/map_water_eat.png", fp_map_blue_eat, width = 15, height = 10, units = "cm")
+  ggsave("plots/map/map_ghg_eat.png", fp_map_ghg_eat, width = 15, height = 10, units = "cm")
+  ggsave("plots/map/map_biodiv_eat.png", fp_map_biodiv_eat, width = 15, height = 10, units = "cm")
+  ggsave("plots/map/map_n_eat.png", fp_map_n_eat, width = 15, height = 10, units = "cm")
+  ggsave("plots/map/map_p_eat.png", fp_map_p_eat, width = 15, height = 10, units = "cm")
   
-  ggsave("plots/fp_map_land_epo.png", fp_map_landuse_epo, width = 15, height = 10, units = "cm")
-  ggsave("plots/fp_map_water_epo.png", fp_map_blue_epo, width = 15, height = 10, units = "cm")
-  ggsave("plots/fp_map_ghg_epo.png", fp_map_ghg_epo, width = 15, height = 10, units = "cm")
-  ggsave("plots/fp_map_biodiv_epo.png", fp_map_biodiv_epo, width = 15, height = 10, units = "cm")
-  ggsave("plots/fp_map_n_epo.png", fp_map_n_epo, width = 15, height = 10, units = "cm")
-  ggsave("plots/fp_map_p_epo.png", fp_map_p_epo, width = 15, height = 10, units = "cm")
+  ggsave("plots/map/map_land_epo.png", fp_map_landuse_epo, width = 15, height = 10, units = "cm")
+  ggsave("plots/map/map_water_epo.png", fp_map_blue_epo, width = 15, height = 10, units = "cm")
+  ggsave("plots/map/map_ghg_epo.png", fp_map_ghg_epo, width = 15, height = 10, units = "cm")
+  ggsave("plots/map/map_biodiv_epo.png", fp_map_biodiv_epo, width = 15, height = 10, units = "cm")
+  ggsave("plots/map/map_n_epo.png", fp_map_n_epo, width = 15, height = 10, units = "cm")
+  ggsave("plots/map/map_p_epo.png", fp_map_p_epo, width = 15, height = 10, units = "cm")
 } 
 
-## mosaic plot -------------------------------------------------------------------------------------------
+
+## Mosaic plot -------------------------------------------------------------------------------------------
 
 # this uses the fp_mosaic function from the function library. It has the following arguments:
 
@@ -275,7 +277,7 @@ if (write) {
 # NOTE that the function can so far not add the continent names on the top x-axis like it is done here: https://iopscience.iop.org/article/10.1088/1748-9326/ab07f5
 # this is due to an issue in the used package ggmosaic and will hopefully be resolved soon
 
-# Cropland --------------------------------
+### Cropland --------------------------------
 (mosaic_land_sq <- fp_mosaic(fp = fp_sq_2013, indicator = "landuse", aggregate_by = c("comm_group_ger", "continent_origin"),
                              divide_by_cells = 1, divide_by_axis = 1, axis_label = expression(paste(m^2)),
                              display_min = 10, round_digs = 0,
@@ -294,14 +296,8 @@ if (write) {
                               plot_title = "Flächenfußabruck je Region und Produktgruppe",
                               tick_offset = c(0,-0.0033,-0.006,-0.006,-0.004,-0.004,-0.002,-0.001,-0.001)*1e4))
 
-# save plot to png
-if (write){
-  ggsave("plots/mosaic_land_sq.png", mosaic_land_sq, width = 25, height = 15, units = "cm")
-  ggsave("plots/mosaic_land_eat.png", mosaic_land_eat, width = 25, height = 15, units = "cm")
-  ggsave("plots/mosaic_land_epo.png", mosaic_land_epo, width = 25, height = 15, units = "cm")
-}
 
-# Water --------------------------------
+### Water --------------------------------
 (mosaic_water_sq <- fp_mosaic(fp = fp_sq_2013, indicator = "blue", aggregate_by = c("comm_group_ger", "continent_origin"),
                              divide_by_cells = 1, divide_by_axis = 1, axis_label = expression(paste(m^3)),
                              display_min = 0.5, round_digs = 2,
@@ -320,14 +316,8 @@ if (write){
                                plot_title = "Wasserfußabruck je Region und Produktgruppe",
                                tick_offset = c(0,-0.0033,-0.006,-0.006,-0.004,-0.004,-0.002,-0.001,-0.001)))
 
-# save plot to png
-if (write) {
-  ggsave("plots/mosaic_water_sq.png", mosaic_water_sq, width = 25, height = 15, units = "cm")
-  ggsave("plots/mosaic_water_eat.png", mosaic_water_eat, width = 25, height = 15, units = "cm")
-  ggsave("plots/mosaic_water_epo.png", mosaic_water_epo, width = 25, height = 15, units = "cm")
-}
 
-# GHG --------------------------------
+### GHG --------------------------------
 (mosaic_ghg_sq <- fp_mosaic(fp = fp_sq_2013, indicator = "ghg_all", aggregate_by = c("comm_group_ger", "continent_origin"),
                               divide_by_cells = 1e-3, divide_by_axis = 1e-3, axis_label = "kg CO2-eq.",
                               display_min = 10, round_digs = 0,
@@ -345,14 +335,8 @@ if (write) {
                              display_min = 10, round_digs = 0,
                              plot_title = "Emissionsfußabruck je Region und Produktgruppe",
                              tick_offset = c(0,-0.0033,-0.006,-0.006,-0.004,-0.004,-0.002,-0.001,-0.001)))
-# save plot to png
-if (write) {
-  ggsave("plots/mosaic_ghg_sq.png", mosaic_ghg_sq, width = 25, height = 15, units = "cm")
-  ggsave("plots/mosaic_ghg_eat.png", mosaic_ghg_eat, width = 25, height = 15, units = "cm")
-  ggsave("plots/mosaic_ghg_epo.png", mosaic_ghg_epo, width = 25, height = 15, units = "cm")
-}
 
-# Biodiversity --------------------------------
+### Biodiversity --------------------------------
 (mosaic_biodiv_sq <- fp_mosaic(fp = fp_sq_2013, indicator = "biodiv", aggregate_by = c("comm_group_ger", "continent_origin"),
                             divide_by_cells = 1e-3, divide_by_axis = 1e-3, axis_label = "10^-9 Arten",
                             display_min = 10, round_digs = 0,
@@ -370,14 +354,8 @@ if (write) {
                              display_min = 10, round_digs = 0,
                              plot_title = "Biodiversitätsfußabruck je Region und Produktgruppe",
                              tick_offset = c(0,-0.0033,-0.006,-0.006,-0.004,-0.004,-0.002,-0.001)))
-# save plot to png
-if (write) {
-  ggsave("plots/mosaic_biodiv_sq.png", mosaic_biodiv_sq, width = 25, height = 15, units = "cm")
-  ggsave("plots/mosaic_biodiv_eat.png", mosaic_biodiv_eat, width = 25, height = 15, units = "cm")
-  ggsave("plots/mosaic_biodiv_epo.png", mosaic_biodiv_epo, width = 25, height = 15, units = "cm")
-}
 
-# N Application --------------------------------
+### N Application --------------------------------
 (mosaic_n_sq <- fp_mosaic(fp = fp_sq_2013, indicator = "n_application", aggregate_by = c("comm_group_ger", "continent_origin"),
                             divide_by_cells = 1e-3, divide_by_axis = 1e-3, axis_label = "g N",
                             display_min = 10, round_digs = 0,
@@ -395,14 +373,8 @@ if (write) {
                            display_min = 10, round_digs = 0,
                            plot_title = "Stickstoffeinsatz je Region und Produktgruppe",
                            tick_offset = c(0,-0.0033,-0.006,-0.006,-0.004,-0.004,-0.002,-0.001,-0.001)))
-# save plot to png
-if (write) {
-  ggsave("plots/mosaic_n_sq.png", mosaic_n_sq, width = 25, height = 15, units = "cm")
-  ggsave("plots/mosaic_n_eat.png", mosaic_n_eat, width = 25, height = 15, units = "cm")
-  ggsave("plots/mosaic_n_epo.png", mosaic_n_epo, width = 25, height = 15, units = "cm")
-}
 
-# P Application --------------------------------
+### P Application --------------------------------
 (mosaic_p_sq <- fp_mosaic(fp = fp_sq_2013, indicator = "p_application", aggregate_by = c("comm_group_ger", "continent_origin"),
                           divide_by_cells = 1e-3, divide_by_axis = 1e-3, axis_label = "g P",
                           display_min = 10, round_digs = 0,
@@ -420,17 +392,38 @@ if (write) {
                            display_min = 10, round_digs = 0,
                              plot_title = "Phosphoreinsatz je Region und Produktgruppe",
                              tick_offset = c(0,-0.0033,-0.006,-0.006,-0.004,-0.004,-0.002,-0.001,-0.001)))
-# save plot to png
+### save plots---------
 if (write) {
-  ggsave("plots/mosaic_p_sq.png", mosaic_p_sq, width = 25, height = 15, units = "cm")
-  ggsave("plots/mosaic_p_eat.png", mosaic_p_eat, width = 25, height = 15, units = "cm")
-  ggsave("plots/mosaic_p_epo.png", mosaic_p_epo, width = 25, height = 15, units = "cm")
+  
+  ggsave("plots/mosaic/mosaic_land_sq.png", mosaic_land_sq, width = 25, height = 15, units = "cm")
+  ggsave("plots/mosaic/mosaic_land_eat.png", mosaic_land_eat, width = 25, height = 15, units = "cm")
+  ggsave("plots/mosaic/mosaic_land_epo.png", mosaic_land_epo, width = 25, height = 15, units = "cm")
+  
+  
+  ggsave("plots/mosaic/mosaic_water_sq.png", mosaic_water_sq, width = 25, height = 15, units = "cm")
+  ggsave("plots/mosaic/mosaic_water_eat.png", mosaic_water_eat, width = 25, height = 15, units = "cm")
+  ggsave("plots/mosaic/mosaic_water_epo.png", mosaic_water_epo, width = 25, height = 15, units = "cm")
+  
+  ggsave("plots/mosaic/mosaic_ghg_sq.png", mosaic_ghg_sq, width = 25, height = 15, units = "cm")
+  ggsave("plots/mosaic/mosaic_ghg_eat.png", mosaic_ghg_eat, width = 25, height = 15, units = "cm")
+  ggsave("plots/mosaic/mosaic_ghg_epo.png", mosaic_ghg_epo, width = 25, height = 15, units = "cm")
+  
+  ggsave("plots/mosaic/mosaic_biodiv_sq.png", mosaic_biodiv_sq, width = 25, height = 15, units = "cm")
+  ggsave("plots/mosaic/mosaic_biodiv_eat.png", mosaic_biodiv_eat, width = 25, height = 15, units = "cm")
+  ggsave("plots/mosaic/mosaic_biodiv_epo.png", mosaic_biodiv_epo, width = 25, height = 15, units = "cm")
+  
+  ggsave("plots/mosaic/mosaic_n_sq.png", mosaic_n_sq, width = 25, height = 15, units = "cm")
+  ggsave("plots/mosaic/mosaic_n_eat.png", mosaic_n_eat, width = 25, height = 15, units = "cm")
+  ggsave("plots/mosaic/mosaic_n_epo.png", mosaic_n_epo, width = 25, height = 15, units = "cm")
+  
+  ggsave("plots/mosaic/mosaic_p_sq.png", mosaic_p_sq, width = 25, height = 15, units = "cm")
+  ggsave("plots/mosaic/mosaic_p_eat.png", mosaic_p_eat, width = 25, height = 15, units = "cm")
+  ggsave("plots/mosaic/mosaic_p_epo.png", mosaic_p_epo, width = 25, height = 15, units = "cm")
 }
 
 
-##  barchart of diet compositions --------------------------------------
+##  Barchart of diet compositions --------------------------------------
 
-Y_food_aut <- merge(Y_food_aut, items_ger[,.(item_code,comm_group_ger)], by = c("item_code"), all.x = TRUE, sort = TRUE)
 #Y_agg <- Y_food_aut[,.(food_g_pc_day_net = sum(food_g_pc_day_net, na.rm = T), eat_g_pc_day_net = sum(eat_g_pc_day_net, na.rm = T)), by =  comm_group_ger]
 Y_agg <- Y_food_aut[, lapply(.SD, sum, na.rm=TRUE), by = comm_group_ger, .SDcols = c("food_g_pc_day_net", "eat_g_pc_day_net", "epo_g_pc_day_net")]#, "food_kcal_pc_day_net", "eat_kcal_pc_day_net")]
 Y_agg_long <- Y_agg %>%
@@ -456,36 +449,61 @@ if (write) {
 }
 
 
-## comparison plot of footprints with per-capita planetary boundaries -------------------
+
+## Stacked barcharts for footprints by consumption items ---------------------
+
+indicators <- c("landuse", "ghg_all", "blue", "biodiv", "n_application", "p_application")
+indicator_labs <- c(landuse = "Flächenverbrauch in m<sup>2</sup>",
+                    ghg_all = "Emissionen in t CO<sub>2</sub>-eq.",
+                    blue = "Wasserverbrauch in m<sup>3</sup>",
+                    biodiv = "Biodiversitätsverlust in 10<sup>-6</sup> Arten",
+                    p_application =  "Phosphoreinsatz in kg",
+                    n_application = "Stickstoffeinsatz in kg")
+
+pb_stack_list <- sapply(indicators, function(ind){
+  stacked_bars(fp_list = list("sq" = fp_sq_2013,  "eat" = fp_eat_2013,  "epo" = fp_epo_2013), 
+               indicator = ind, axis_lab = indicator_labs[ind])
+}, simplify = FALSE, USE.NAMES = TRUE)
+
+pb_stack <- wrap_plots(pb_stack_list, nrow = 2, nocl = 3, guides = "collect") & theme(legend.position = "bottom")
+
+if(write) ggsave("plots/pb_stack.png", pb_stack, width = 30, height = 25, units = "cm")
+
+
+## Comparison plot of footprints with per-capita planetary boundaries -------------------
 
 # NOTE: this will become the spiderweb chart once we have all indicators
 
-land_ha = 13 * 1e6 / 10e9 * 100
-water_m3 = 2500 / 10e9 * 1e9
-ghg_t = 5 * 1e9 / 10e9
-biodiv_species = 10 / 10e9
-n_appl = 90 * 1e9 / 10e9
-p_appl = 8 * 1e9 / 10e9
+pbs <- c(
+  #"land_ha" = 13 * 1e6 / 10e9 * 100,
+  "land_m2" = 13 * 1e6 / 10e9 * 1e6,
+  "water_m3" = 2500 / 10e9 * 1e9,
+  "ghg_t" = 5 * 1e9 / 10e9,
+  "biodiv_species" = 10 / 10e9 * 10e6,
+  "n_appl_kg" = 90 * 1e9 / 10e9,
+  "p_appl_kg" = 8 * 1e9 / 10e9
+)
 
 # aggregate indicators
 fp_agg <- as.data.frame(rbind(fp_sq_2013_agg, fp_eat_2013_agg, fp_epo_2013_agg))
 fp_agg_land <- as.data.frame(rbind(fp_sq_2013_agg_crop, fp_eat_2013_agg_crop, fp_epo_2013_agg_crop))
 
-fp_agg$diet <- factor(c("Status \nQuo", "EAT \nLancet", "Ernährungs- \npyramide"), levels = c("Status \nQuo", "EAT \nLancet", "Ernährungs- \npyramide"))
-fp_agg_land$diet <- factor(c("Status \nQuo", "EAT \nLancet", "Ernährungs- \npyramide"), levels = c("Status \nQuo", "EAT \nLancet", "Ernährungs- \npyramide"))
+fp_agg$diet <- factor(c("Status \nQuo", "Planetary \nHealth", "Ernährungs- \npyramide"), levels = c("Status \nQuo", "Planetary \nHealth", "Ernährungs- \npyramide"))
+fp_agg_land$diet <- factor(c("Status \nQuo", "Planetary \nHealth", "Ernährungs- \npyramide"), levels = c("Status \nQuo", "Planetary \nHealth", "Ernährungs- \npyramide"))
 
 
-(pb_bar_land <- ggplot(fp_agg_land, aes(x = diet, y = landuse / 10000)) +
+(pb_bar_land <- ggplot(fp_agg_land, aes(x = diet, y = landuse)) + #/ 10000
   # geom_bar(stat="identity", fill = "#176040") +
     geom_bar(stat="identity", fill = viridis(6)[1]) +
-    geom_abline(intercept = land_ha, slope = 0, color = "red") +
-  labs(y = "Flächenverbrauch in ha", x = "") +
-  theme_minimal())
+    geom_abline(intercept = pbs["land_m2"], slope = 0, color = "red") +
+  labs(y = "Flächenverbrauch in m<sup>2</sup>", x = "") +
+  theme_minimal()+
+  theme(axis.title.y = element_markdown()))
 
 (pb_bar_water <- ggplot(fp_agg, aes(x = diet, y = blue)) +
     # geom_bar(stat="identity", fill = "#293969") +
     geom_bar(stat="identity", fill = viridis(6)[2]) +
-    geom_abline(intercept = water_m3, slope = 0, color = "red") +
+    geom_abline(intercept = pbs["water_m3"], slope = 0, color = "red") +
     labs(y = "Wasserverbrauch in m<sup>3</sup>", x = "")+
     coord_cartesian(ylim = c(0, 250))+
     theme_minimal()+
@@ -494,35 +512,77 @@ fp_agg_land$diet <- factor(c("Status \nQuo", "EAT \nLancet", "Ernährungs- \npyr
 (pb_bar_ghg <- ggplot(fp_agg, aes(x = diet, y = ghg_all)) +
     # geom_bar(stat="identity", fill = "#521f11") +
     geom_bar(stat="identity", fill = viridis(6)[3]) +
-    geom_abline(intercept = ghg_t, slope = 0, color = "red") +
+    geom_abline(intercept = pbs["ghg_t"], slope = 0, color = "red") +
     labs(y = "Emissionen in t CO<sub>2</sub>-eq.", x = "")+
     theme_minimal()+
     theme(axis.title.y = element_markdown()))
 
 (pb_bar_biodiv <- ggplot(fp_agg, aes(x = diet, y = biodiv)) +
     geom_bar(stat="identity", fill = viridis(6)[4]) +
-    geom_abline(intercept = biodiv_species, slope = 0, color = "red") +
+    geom_abline(intercept = pbs["biodiv_species"], slope = 0, color = "red") +
     labs(y = "Biodiversitätsverlust in 10^-6 Arten", x = "")+
     theme_minimal()+
     theme(axis.title.y = element_markdown()))
 
 (pb_bar_n <- ggplot(fp_agg, aes(x = diet, y = n_application)) +
     geom_bar(stat="identity", fill = viridis(6)[5]) +
-    geom_abline(intercept = n_appl, slope = 0, color = "red") +
-    labs(y = "Stickstoffeinsatz in t", x = "")+
+    geom_abline(intercept = pbs["n_appl_kg"], slope = 0, color = "red") +
+    labs(y = "Stickstoffeinsatz in kg", x = "")+
     theme_minimal()+
     theme(axis.title.y = element_markdown()))
 
 (pb_bar_p <- ggplot(fp_agg, aes(x = diet, y = p_application)) +
     geom_bar(stat="identity", fill = viridis(6)[6]) +
-    geom_abline(intercept = p_appl, slope = 0, color = "red") +
-    labs(y = "Phosphoreinsatz in t", x = "")+
+    geom_abline(intercept = pbs["p_appl_kg"], slope = 0, color = "red") +
+    labs(y = "Phosphoreinsatz in kg", x = "")+
     theme_minimal()+
     theme(axis.title.y = element_markdown()))
 
 (pb_bar <- pb_bar_land + pb_bar_water + pb_bar_ghg + pb_bar_biodiv + pb_bar_n + pb_bar_p)
 
 if (write) {
-  ggsave("plots/pb_bar.png", pb_bar, width = 15, height = 12, units = "cm")
+  ggsave("plots/pb_bar.png", pb_bar, width = 15, height = 12, units = "cm", scale = 1.5)
 }
 
+
+## Spiderweb chart -----------------------
+
+fp_spider <- fp_agg %>% rename(group = diet) %>%
+  select(c(group, landuse, blue, ghg_all, biodiv, n_application, p_application)) %>%
+  rename(Flächenverbrauch = landuse, Wasserverbrauch = blue, Emissionen = ghg_all, Biodiversität = biodiv, Stickstoff = n_application, Phosphor = p_application)
+
+# rescale by pb values
+fp_spider[,2:7] <- t(t(fp_spider[,2:7])/pbs)
+fp_spider <- mutate(fp_spider, Biodiversität = Biodiversität/10)
+
+fp_spider_log <- fp_spider
+fp_spider_log[,2:7] <- log(fp_spider_log[,2:7])
+
+
+(pb_spider <- spiderweb(fp_spider, 
+          grid.max = max(fp_spider[,2:7], na.rm = TRUE), grid.min = 0, grid.mid = 1,
+          grid.max.label = "", grid.min.label = "", grid.mid.label = "",
+          gridline.mid.linetype = "solid",
+          gridline.max.linetype = "solid",
+          gridline.min.linetype = "solid",
+          gridline.mid.colour = "red",
+          background.circle.colour = "transparent",
+          legend.title = "",
+          centre.y = -0.5,
+          plot.extent.x.sf = 2,
+          group.line.width = 1,
+          group.point.size = 2,
+          group.alpha = 0.7,
+          axis.line.colour="grey",
+          axis.line.alpha = 0.6))
+
+if (write) ggsave("plots/pb_spiderweb.png", pb_spider, width = 10, units = "cm", scale = 1.5)
+
+
+## Circular planetary boundary chart (experimental) -------------
+
+pb_circle <- sapply(c("sq", "eat", "epo"), circle_plot, fp_table = fp_spider, log = FALSE,
+                    simplify = FALSE, USE.NAMES = TRUE)
+pb_circle <- wrap_plots(pb_circle)
+
+if (write) ggsave("plots/pb_circle.png", pb_circle, width = 30, units = "cm", scale = 1)
