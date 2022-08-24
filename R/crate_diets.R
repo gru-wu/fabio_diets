@@ -42,7 +42,7 @@ if (vers == "1.1"){
 is.finite.data.frame <- function(x) do.call(cbind, lapply(x, is.finite))
 
 
-# prepare kaloric content data from food balances ------------------------------------------
+# prepare caloric content data from food balances ------------------------------------------
 
 # extract relevant cbs columns
 cbs_food <- cbs[,.(area_code, area, item_code, item, year, food, food_kg_pc_yr, food_kcal_pc_day, fat_g_pc_day, prot_g_pc_day)]
@@ -155,10 +155,10 @@ Y_food_aut[, epo_group_port_sum := sum(food_port_pc_day_net), by = epo_group]
 # add portion suggestions by group 
 Y_food_aut <- merge(Y_food_aut, epo_diet[,.(epo_group, epo_port_day = `portions/day`)], by = "epo_group", all.x = TRUE, sort = FALSE)
 #Y_food_aut[, (c("epo_group_port_sum","portions_day")) := replace(.SD, is.na(.SD), 0), .SDcols = c("epo_group_port_sum","portions_day")]
-Y_food_aut[, `:=`(epo_g_pc_day_net = ifelse(is.finite(epo_port_day), food_g_pc_day_net*epo_port_day/epo_group_port_sum, 0),
-                  epo_kcal_pc_day_net = ifelse(is.finite(epo_port_day), food_kcal_pc_day_net*epo_port_day/epo_group_port_sum, 0))
+Y_food_aut[, `:=`(epo_g_pc_day_net = ifelse(is.finite(epo_port_day), food_g_pc_day_net*epo_port_day/epo_group_port_sum, food_g_pc_day_net),
+                  epo_kcal_pc_day_net = ifelse(is.finite(epo_port_day), food_kcal_pc_day_net*epo_port_day/epo_group_port_sum, food_kcal_pc_day_net))
            ]
-# NOTE: items without portion recommendation are set to zero here!
+# NOTE: items without portion recommendation (alcohol, coffee & tea) are kept at their status quo level here as well!
 
 
 # transform net consumption values per day and capita into loss- and waste-inclusive per-capita values per year
