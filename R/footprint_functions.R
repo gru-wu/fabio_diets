@@ -198,11 +198,11 @@ fp_map <- function(fp, map = world_map, indicator = "landuse", per_capita = FALS
   world_fp <- left_join(map, fp, by = c("ISO_A3" = "country_origin"))
 
   # set unit for legend
-  indicators_long <-  c("landuse" = "Flächenverbrauch", "biomass" = "Biomasse", "blue" = "Süßwasser- <br>verbrauch", "green" = "Grünes Wasser", "ghg" = "Emissionen", "luh" = "Emissionen", "ghg_all" = "Emissionen",
-                        "biodiv" = "Biodiversitätsverlust", "n_application" = "Stickstoff", "p_application" = "Phosphor")
+  indicators_long <-  c("landuse" = "Anbaufläche", "biomass" = "Biomasse", "blue" = "Wassereinsatz", "green" = "Grünes Wasser", "ghg" = "THG-Emissionen", "luh" = "THG-Emissionen", "ghg_all" = "THG-Emissionen",
+                        "biodiv" = "Biodiversitätsverlust", "n_application" = "Stickstoffeinsatz", "p_application" = "Phosphoreinsatz")
   indicator_long <- indicators_long[indicator]
-  units <- c("landuse" = "m<sup>2</sup>", "biomass" = "t", "blue" = "m<sup>3</sup>", "green" = "m<sup>3</sup>", "ghg" = "t CO<sub>2</sub>-eq.", "luh" = "t CO<sub>2</sub>-eq.", "ghg_all" = "t CO<sub>2</sub>-eq.",
-             "biodiv" = "10^-6 Spezien", "n_application" = "kg", "p_application" = "kg")
+  units <- c("landuse" = "m<sup>2</sup>", "biomass" = "t", "blue" = "m<sup>3</sup>", "green" = "m<sup>3</sup>", "ghg" = "t CO<sub>2</sub>-Äq.", "luh" = "t CO<sub>2</sub>-Äq.", "ghg_all" = "t CO<sub>2</sub>-Äq.",
+             "biodiv" = "10^-6 Arten", "n_application" = "kg", "p_application" = "kg")
   unit = units[indicator]
 
   if(per_capita) indicator <- paste0(indicator,"_pc")
@@ -214,7 +214,7 @@ fp_map <- function(fp, map = world_map, indicator = "landuse", per_capita = FALS
     scale_fill_viridis_c(direction = -1, na.value = "lightgrey", ...) +
     coord_sf(crs = "+proj=robin") + # "+proj=moll"   "+proj=wintri"
     theme_map() +
-    theme(plot.title = element_text(hjust = 0.5), plot.title.position = "plot", legend.title = element_markdown()) #legend.position = "right"
+    theme(plot.title = element_text(hjust = 0.5), plot.title.position = "plot", legend.title = element_markdown(size = 8)) #legend.position = "right"
 
 }
 
@@ -355,8 +355,8 @@ stacked_bars <- function(fp_list, indicator = "landuse", per_capita = FALSE,
                          axis_lab = "",
                          title = ""){
   
-  # aggregate footprints by consumer item and combine to table with diets in colums
-  diet_labs = c("sq" = "Status \nQuo", "eat" =  "Planetary \nHealth", "epo" = "Ernährungs-\npyramide")
+  # aggregate footprints by consumer item and combine to table with diets in columns
+  diet_labs = c("sq" = "Status \nQuo", "epo" = "Ernährungs-\npyramide", "eat" =  "Planetary \nHealth Diet")
   fp_agg_long <- lapply(names(fp_list), function(fp){
     if (indicator == "landuse") fp_list[[fp]] <- fp_list[[fp]][group_origin != "Grazing",]
     fp_aggregate(fp_list[[fp]], aggregate_by = "comm_group_ger", indicators = indicator) %>%
@@ -377,6 +377,23 @@ stacked_bars <- function(fp_list, indicator = "landuse", per_capita = FALSE,
       axis.title.y = element_markdown(face = "bold", size = 10)))
   
 }
+
+# just the data
+stacked_data <- function(fp_list, indicator = "landuse", per_capita = FALSE,
+                        aggregate_by =  c("comm_group_ger")){
+  
+  # aggregate footprints by consumer item and combine to table with diets in columns
+  diet_labs = c("sq" = "Status \nQuo", "eat" =  "Planetary \nHealth", "epo" = "Ernährungs-\npyramide")
+  fp_agg_long <- lapply(names(fp_list), function(fp){
+    if (indicator == "landuse") fp_list[[fp]] <- fp_list[[fp]][group_origin != "Grazing",]
+    fp_aggregate(fp_list[[fp]], aggregate_by = "comm_group_ger", indicators = indicator) %>%
+      #rename(!!sym(fp) := !!sym(indicator)) %>% 
+      mutate(diet = fp, diet_lab = factor(diet_labs[fp], levels = diet_labs))
+  }) %>% rbindlist
+  #fp_ind <- fp_list_agg %>% purrr::reduce(inner_join, by = "comm_group_ger") %>% 
+  
+}
+
 
 
 # circle planetary boundary plot
