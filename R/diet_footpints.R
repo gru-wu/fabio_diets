@@ -68,9 +68,20 @@ Y_food_aut <- merge(Y_food_aut, items_ger[,.(item_code,comm_group_ger)], by = c(
 setkey(Y_food_aut, area_code, comm_code)
 
 # colors for food groups
-food_cols <- openxlsx::read.xlsx("inst/items_conc.xlsx", sheet = "colors", colNames = FALSE)
+food_cols <- openxlsx::read.xlsx("inst/items_conc.xlsx", sheet = "colors_alt", colNames = FALSE)
 food_cols_vect <- food_cols$X2
 names(food_cols_vect) <- food_cols$X1
+
+# per-capita planetary bondaries from Willett et al
+pbs <- c(
+  #"land_ha" = 13 * 1e6 / 10e9 * 100,
+  "landuse" = 13 * 1e6 / 10e9 * 1e6, # in m2
+  "blue" = 2500 / 10e9 * 1e9, # in m3
+  "ghg_all" = 5 * 1e9 / 10e9, # in t
+  "biodiv" = 10 / 10e9 * 10e6, # in 10-6 species
+  "n_application" = 90 * 1e9 / 10e9, # in kg
+  "p_application" = 8 * 1e9 / 10e9 # in kg
+)
 
 
 #-------------------------------------------------------#
@@ -440,17 +451,20 @@ fp_mosaic_data <- lapply(list("mosaic_sq" = fp_sq_2013,  "mosaic_epo" = fp_epo_2
 ##  Barchart of diet compositions --------------------------------------
 
 #Y_agg <- Y_food_aut[,.(food_g_pc_day_net = sum(food_g_pc_day_net, na.rm = T), eat_g_pc_day_net = sum(eat_g_pc_day_net, na.rm = T)), by =  comm_group_ger]
-Y_agg <- Y_food_aut[, lapply(.SD, sum, na.rm=TRUE), by = comm_group_ger, .SDcols = c("food_g_pc_day_net", "eat_g_pc_day_net", "epo_g_pc_day_net")]#, "food_kcal_pc_day_net", "eat_kcal_pc_day_net")]
+Y_agg <- Y_food_aut[, lapply(.SD, sum, na.rm=TRUE), by = comm_group_ger, .SDcols = c("food_g_pc_day_net", "eat_g_pc_day_net", "epo_g_pc_day_net", "food_kcal_pc_day_net", "eat_kcal_pc_day_net", "epo_kcal_pc_day_net")]
 Y_agg_long <- Y_agg %>%
-  rename_with(~gsub("_g_pc_day_net", "", .x, fixed = TRUE)) %>%
-  pivot_longer(names_to = "diet", cols = c(food:epo), values_to = "g_pc_day") %>%
-  filter(g_pc_day > 0) %>%
+  rename_with(~gsub("_pc_day_net", "", .x, fixed = TRUE)) %>%
+  #pivot_longer(names_to = "diet", cols = c(food:epo), values_to = "g_pc_day") %>%
+  pivot_longer(names_to = c("diet", ".value"), cols = -comm_group_ger, names_sep = "\\_") %>%
+  filter(g > 0) %>%
   mutate(diet_lab = ifelse(diet == "food", "Status Quo", ifelse(diet == "eat", "Planetary Health Diet", "Ernährungspyramide")))
 
-food_cols_vect_sel <- food_cols_vect[names(food_cols_vect) %in% unique(Y_agg_long$comm_group_ger)]
+food_cols_vect_sel <- food_cols_alt_vect[names(food_cols_alt_vect) %in% unique(Y_agg_long$comm_group_ger)]
 
 # plot
-(diet_plot <- ggplot(Y_agg_long, aes(x = factor(diet_lab, levels = c("Status Quo", "Ernährungspyramide", "Planetary Health Diet")), y = g_pc_day, fill = factor(comm_group_ger, levels = rev(names(food_cols_vect_sel))))) +
+(diet_plot_g <- ggplot(Y_agg_long, 
+                     aes(x = factor(diet_lab, levels = rev(c("Status Quo", "Ernährungspyramide", "Planetary Health Diet"))), 
+                         y = g, fill = factor(comm_group_ger, levels = rev(names(food_cols_vect_sel))))) +
   geom_bar(stat="identity", alpha = 0.85) +
   scale_fill_manual(values = food_cols_vect_sel, name = "", guide = guide_legend()) +
   labs(y = "Gramm pro Kopf und Tag", x = "") +
@@ -459,16 +473,31 @@ food_cols_vect_sel <- food_cols_vect[names(food_cols_vect) %in% unique(Y_agg_lon
   theme(legend.position = "bottom", legend.direction="horizontal", legend.box = "horizontal",
         axis.text.y = element_text(face = "bold", size = 10)))
 
+(diet_plot_kcal <- ggplot(Y_agg_long, 
+                       aes(x = factor(diet_lab, levels = rev(c("Status Quo", "Ernährungspyramide", "Planetary Health Diet"))), 
+                           y = kcal, fill = factor(comm_group_ger, levels = rev(names(food_cols_vect_sel))))) +
+    geom_bar(stat="identity", alpha = 0.85) +
+    scale_fill_manual(values = food_cols_vect_sel, name = "", guide = guide_legend()) +
+    labs(y = "Kcal pro Kopf und Tag", x = "") +
+    coord_flip() +
+    theme_minimal() +
+    theme(legend.position = "bottom", legend.direction="horizontal", legend.box = "horizontal",
+          axis.text.y = element_text(face = "bold", size = 10)))
+
 #save plot
 if (write) {
-  ggsave(filename = "plots/diet_plot.png", diet_plot, width = 12, height = 3.5)
+  ggsave(filename = "plots/diet_plot_g.png", diet_plot_g, width = 12, height = 3.5)
+  ggsave(filename = "plots/diet_plot_kcal.png", diet_plot_kcal, width = 12, height = 3.5)
   # write.xlsx(Y_agg)
 }
 
 # save data
-diet_data <- rename(Y_agg, sq = food_g_pc_day_net, eat = eat_g_pc_day_net, epo = epo_g_pc_day_net)
+diet_data <- Y_agg_long#rename(Y_agg, sq = food_g_pc_day_net, epo = epo_g_pc_day_net, eat = eat_g_pc_day_net, )
 #plot_data <- c(plot_data, "diet_plot" = list(diet_data))
 
+# most important items for each group
+Y_agg_item <- Y_food_aut[, lapply(.SD, sum, na.rm=TRUE), by = c("comm_group_ger", "item"), 
+                         .SDcols = c("food_g_pc_day_net", "eat_g_pc_day_net", "epo_g_pc_day_net", "food_kcal_pc_day_net", "eat_kcal_pc_day_net", "epo_kcal_pc_day_net")]
 
 ## Stacked barcharts for footprints by consumption items ---------------------
 
@@ -482,7 +511,7 @@ indicator_labs <- c(landuse = "Anbaufläche  in m<sup>2</sup>",
 
 pb_stack_list <- sapply(indicators, function(ind){
   stacked_bars(fp_list = list("sq" = fp_sq_2013,  "epo" = fp_epo_2013, "eat" = fp_eat_2013), 
-               indicator = ind, axis_lab = indicator_labs[ind])
+               indicator = ind, axis_lab = indicator_labs[ind], bound = TRUE)
 }, simplify = FALSE, USE.NAMES = TRUE)
 
 (pb_stack <- wrap_plots(pb_stack_list, nrow = 2, nocl = 3, guides = "collect") & theme(legend.position = "bottom"))
@@ -501,17 +530,6 @@ pb_stack_data <- pb_stack_data %>% reduce(full_join, by=c('comm_group_ger', 'die
 
 ## Comparison plot of footprints with per-capita planetary boundaries -------------------
 
-# NOTE: this will become the spiderweb chart once we have all indicators
-
-pbs <- c(
-  #"land_ha" = 13 * 1e6 / 10e9 * 100,
-  "land_m2" = 13 * 1e6 / 10e9 * 1e6,
-  "water_m3" = 2500 / 10e9 * 1e9,
-  "ghg_t" = 5 * 1e9 / 10e9,
-  "biodiv_species" = 10 / 10e9 * 10e6,
-  "n_appl_kg" = 90 * 1e9 / 10e9,
-  "p_appl_kg" = 8 * 1e9 / 10e9
-)
 
 # aggregate indicators
 fp_agg <- as.data.frame(rbind(fp_sq_2013_agg, fp_epo_2013_agg, fp_eat_2013_agg))
@@ -525,7 +543,7 @@ fp_agg$diet <- factor(c("Status \nQuo", "Ernährungs- \npyramide", "Planetary \n
 (pb_bar_land <- ggplot(fp_agg, aes(x = diet, y = landuse)) + #/ 10000
   # geom_bar(stat="identity", fill = "#176040") +
     geom_bar(stat="identity", fill = viridis(6)[1]) +
-    geom_abline(intercept = pbs["land_m2"], slope = 0, color = "red") +
+    geom_abline(intercept = pbs["landuse"], slope = 0, color = "red") +
   labs(y = "Flächenverbrauch in m<sup>2</sup>", x = "") +
   theme_minimal()+
   theme(axis.title.y = element_markdown()))
@@ -533,7 +551,7 @@ fp_agg$diet <- factor(c("Status \nQuo", "Ernährungs- \npyramide", "Planetary \n
 (pb_bar_water <- ggplot(fp_agg, aes(x = diet, y = blue)) +
     # geom_bar(stat="identity", fill = "#293969") +
     geom_bar(stat="identity", fill = viridis(6)[2]) +
-    geom_abline(intercept = pbs["water_m3"], slope = 0, color = "red") +
+    geom_abline(intercept = pbs["blue"], slope = 0, color = "red") +
     labs(y = "Wasserverbrauch in m<sup>3</sup>", x = "")+
     coord_cartesian(ylim = c(0, 250))+
     theme_minimal()+
@@ -542,28 +560,28 @@ fp_agg$diet <- factor(c("Status \nQuo", "Ernährungs- \npyramide", "Planetary \n
 (pb_bar_ghg <- ggplot(fp_agg, aes(x = diet, y = ghg_all)) +
     # geom_bar(stat="identity", fill = "#521f11") +
     geom_bar(stat="identity", fill = viridis(6)[3]) +
-    geom_abline(intercept = pbs["ghg_t"], slope = 0, color = "red") +
+    geom_abline(intercept = pbs["ghg_all"], slope = 0, color = "red") +
     labs(y = "Emissionen in t CO<sub>2</sub>-Äq.", x = "")+
     theme_minimal()+
     theme(axis.title.y = element_markdown()))
 
 (pb_bar_biodiv <- ggplot(fp_agg, aes(x = diet, y = biodiv)) +
     geom_bar(stat="identity", fill = viridis(6)[4]) +
-    geom_abline(intercept = pbs["biodiv_species"], slope = 0, color = "red") +
+    geom_abline(intercept = pbs["biodiv"], slope = 0, color = "red") +
     labs(y = "Biodiversitätsverlust in 10^-6 Arten", x = "")+
     theme_minimal()+
     theme(axis.title.y = element_markdown()))
 
 (pb_bar_n <- ggplot(fp_agg, aes(x = diet, y = n_application)) +
     geom_bar(stat="identity", fill = viridis(6)[5]) +
-    geom_abline(intercept = pbs["n_appl_kg"], slope = 0, color = "red") +
+    geom_abline(intercept = pbs["n_application"], slope = 0, color = "red") +
     labs(y = "Stickstoffeinsatz in kg", x = "")+
     theme_minimal()+
     theme(axis.title.y = element_markdown()))
 
 (pb_bar_p <- ggplot(fp_agg, aes(x = diet, y = p_application)) +
     geom_bar(stat="identity", fill = viridis(6)[6]) +
-    geom_abline(intercept = pbs["p_appl_kg"], slope = 0, color = "red") +
+    geom_abline(intercept = pbs["p_application"], slope = 0, color = "red") +
     labs(y = "Phosphoreinsatz in kg", x = "")+
     theme_minimal()+
     theme(axis.title.y = element_markdown()))
@@ -619,9 +637,10 @@ if (write) ggsave("plots/pb_spiderweb.png", pb_spider, width = 10, units = "cm",
 
 ## Circular planetary boundary chart (experimental) -------------
 
-pb_circle <- sapply(c("sq", "epo", "eat"), circle_plot, fp_table = fp_spider, log = FALSE,
+pb_circle <- sapply(c("sq", "epo", "eat"), circle_plot_grad, fp_table = fp_spider, ylim.min = -0.1, ylim.max = 4, log = FALSE,
                     simplify = FALSE, USE.NAMES = TRUE)
-(pb_circle <- wrap_plots(pb_circle))
+(pb_circle <- wrap_plots(pb_circle, guides = "collect") & theme(legend.position = 'bottom',
+                                                                 legend.direction = 'horizontal'))
 
 if (write) ggsave("plots/pb_circle.png", pb_circle, width = 30, units = "cm", scale = 1)
 

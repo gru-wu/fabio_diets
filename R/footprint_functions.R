@@ -350,7 +350,7 @@ fp_mosaic <- function(fp, indicator, per_captia = FALSE, consumer_country = "AUT
 # stacked bar chart by item ------------------
 
 stacked_bars <- function(fp_list, indicator = "landuse", per_capita = FALSE,
-                         aggregate_by =  c("comm_group_ger"),
+                         aggregate_by =  c("comm_group_ger"), bound = TRUE,
                          origin_items = "ALL", target_items = "ALL", origin_groups, target_groups, 
                          axis_lab = "",
                          title = ""){
@@ -368,14 +368,19 @@ stacked_bars <- function(fp_list, indicator = "landuse", per_capita = FALSE,
   # plot
   food_cols_vect_sel <- food_cols_vect[names(food_cols_vect) %in% unique(fp_agg_long$comm_group_ger)]
   
-  (fp_plot <- ggplot(fp_agg_long, aes(x = diet_lab, y = !!sym(indicator), fill = factor(comm_group_ger, levels = rev(names(food_cols_vect_sel))))) +
+  fp_plot <- ggplot(fp_agg_long, aes(x = diet_lab, y = !!sym(indicator), fill = factor(comm_group_ger, levels = rev(names(food_cols_vect_sel))))) +
       geom_bar(stat="identity", alpha = 0.85) +
       scale_fill_manual(values = food_cols_vect_sel, name = "", guide = guide_legend()) +
       labs(y = axis_lab, x = "") +
       theme_minimal() +
       theme(legend.position = "bottom", legend.direction="horizontal", legend.box = "horizontal",
-      axis.title.y = element_markdown(face = "bold", size = 10)))
+      axis.title.y = element_markdown(face = "bold", size = 10))
   
+  if(bound) {
+    fp_plot <- fp_plot + geom_hline(yintercept = pbs[indicator], color = "red")
+  }
+  
+  return(fp_plot)
 }
 
 # just the data
@@ -398,7 +403,7 @@ stacked_data <- function(fp_list, indicator = "landuse", per_capita = FALSE,
 
 # circle planetary boundary plot
 
-circle_plot <- function(fp_table, diet, ylim = 4, log = FALSE){
+circle_plot <- function(fp_table, diet, ylim.max = 4, ylim.min = 0, log = FALSE){
   
   diet_index <- ifelse(diet %in% c("sq", "Staus Quo"),1, ifelse(diet %in% c("eat", "Planetary Health"),2,ifelse(diet %in% c("epo", "Ernährungspyramide"),3,NA)))
   title = ifelse(diet %in% c("sq", "Staus Quo"),"Staus Quo", ifelse(diet %in% c("eat", "Planetary Health"),"Planetary Health Diet",ifelse(diet %in% c("epo", "Ernährungspyramide"),"Ernährungspyramide",NA)))
@@ -410,15 +415,21 @@ circle_plot <- function(fp_table, diet, ylim = 4, log = FALSE){
   
   
   plt <- ggplot(fp_circle_scen) +
+    geom_hline(
+      aes(yintercept = y), 
+      data.frame(y = c(0:(ylim.max-1))),
+      color = "lightgrey",
+      alpha = 0.9
+    ) + 
     geom_col(
       aes(
         x = ind,
         y = value,
-        fill = limit
+        fill = value
       ),
       color = "gray",
       position = "dodge2",
-      show.legend = FALSE,
+      show.legend = TRUE,
       alpha = .9
     ) +
     geom_hline(
@@ -429,10 +440,95 @@ circle_plot <- function(fp_table, diet, ylim = 4, log = FALSE){
       alpha = 0.8
     ) + 
     # Make it circular!
-    scale_fill_manual(values = c("yes" = "red", "no" = "green")) +
-    #scale_fill_gradientn(colors = c("green", "yellow", "red", "firebrick"), values = c(0,1,2,4)) +
+    #scale_fill_manual(values = c("yes" = "red", "no" = "green")) +
+    scale_fill_gradientn(colors = c("darkgreen", "green", "yellow", "red", "firebrick"), 
+                         values = scales::rescale(c(0,0.8, 1.5, 2,4)),
+                         limits = c(0, ylim.max),
+                         name = "Value relative to \n planetary boundary") +
+    #scale_fill_gradient2(low = "darkgreen", mid =  "yellow", high =  "firebrick", midpoint = 1.2, limits = c(0,4)) +
+    
     scale_y_continuous(
-      limits = c(-1, ylim),
+      limits = c(ylim.min, ylim.max),
+      expand = c(0, 0),
+      breaks = c(seq(0,1,1)) 
+    ) +
+    coord_polar(clip = "off")+
+    labs(title = title) + 
+    #expand_limits(y = 10) + # or some other arbitrarily large number
+    theme_minimal() +
+    theme(
+      # Remove axis ticks and text
+      axis.title = element_blank(),
+      axis.ticks = element_blank(),
+      axis.text.y = element_blank(),
+      # Use gray text for the region names
+      axis.text.x = element_text(color = "gray12", size = 8, face="bold"),
+      # Move the legend to the bottom
+      legend.position = "bottom",
+      panel.grid=element_blank(),
+      plot.title = element_text(hjust = 0.5)
+      #plot.margin = margin(0,1,0,1,unit = "cm")
+    )
+  
+  return(plt)
+  
+}
+
+
+circle_plot_grad <- function(fp_table, diet, ylim.max = 4, ylim.min = 0, log = FALSE){
+  
+  diet_index <- ifelse(diet %in% c("sq", "Staus Quo"),1, ifelse(diet %in% c("eat", "Planetary Health"),2,ifelse(diet %in% c("epo", "Ernährungspyramide"),3,NA)))
+  title = ifelse(diet %in% c("sq", "Staus Quo"),"Staus Quo", ifelse(diet %in% c("eat", "Planetary Health"),"Planetary Health Diet",ifelse(diet %in% c("epo", "Ernährungspyramide"),"Ernährungspyramide",NA)))
+  
+  
+  fp_circle_scen <- data.frame(ind = as.character(names(fp_spider[-1])), 
+                               value = unlist(fp_spider[diet_index,][-1]),
+                               limit = ifelse(unlist(fp_spider[diet_index,])[-1] > ifelse(log, 0, 1), "yes", "no"))
+  
+  
+  fp_circle_scen_exp <- fp_circle_scen %>%
+     rowwise() %>%
+    summarise(ind = ind,
+              value = list(seq(value,0, by = -0.05))) %>%
+    unnest(cols = value)
+  
+  plt <- ggplot(fp_circle_scen_exp) +
+    geom_hline(
+      aes(yintercept = y), 
+      data.frame(y = c(0:(ylim.max-1))),
+      color = "lightgrey",
+      alpha = 0.9
+    ) + 
+    geom_col(
+      aes(
+        x = ind,
+        y = value,
+        #group = seq(0,value, by = 0.05),
+        fill = value
+      ),
+      aes = 0.9,
+      color = "transparent",
+      position = "identity",
+      show.legend = TRUE,
+      alpha = 0.8
+    ) +
+    geom_hline(
+      aes(yintercept = y), 
+      data.frame(y = c(ifelse(log, 0,1))),
+      color = "blue",
+      size = 0.8,
+      alpha = 0.8
+    ) + 
+    # Make it circular!
+    #scale_fill_manual(values = c("yes" = "red", "no" = "green")) +
+    scale_fill_gradientn(colors = c("darkgreen", "green", "yellow", "red", "firebrick"), 
+                         values = scales::rescale(c(0,0.8, 1.5, 2,4)),
+                         limits = c(0, ylim.max),
+                         name = "Wert relativ\nzum Grenzwert") + # "Value relative to\nplanetary boundary"
+    #scale_fill_gradient2(low = "darkgreen", mid =  "yellow", high =  "firebrick", midpoint = 1.2, limits = c(0,4)) +
+    
+    scale_y_continuous(
+      limits = c(ylim.min, ylim.max),
       expand = c(0, 0),
       breaks = c(seq(0,1,1)) 
     ) +
@@ -451,7 +547,11 @@ circle_plot <- function(fp_table, diet, ylim = 4, log = FALSE){
       legend.position = "bottom",
       panel.grid=element_blank(),
       plot.title = element_text(hjust = 0.5),
-      plot.margin = margin(0,1,0,1,unit = "cm")
+      plot.margin = margin(0,1,0,1,unit = "cm"),
+      legend.box.just = "center",
+      legend.title = element_blank(),
+      legend.title.align = 0.5,
+      legend.margin=margin(0,0,0,0.5,unit = "cm")
     )
   
   return(plt)
