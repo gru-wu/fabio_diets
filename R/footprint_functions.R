@@ -101,6 +101,11 @@ footprint <- function(country = "AUT", consumption = "food", allocation = "value
 }
 
 
+##  function to aggregate columns of a matrix by their name -------
+agg <- function(x) { x <- as.matrix(x) %*% sapply(unique(colnames(x)),"==",colnames(x));  return(x) }
+
+
+
 ##  function to extract final demand vector being investigated -------
 
 # arguments:

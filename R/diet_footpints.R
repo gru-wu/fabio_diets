@@ -21,7 +21,7 @@ library(openxlsx)
 source("R/footprint_functions.R")
 
 # select fabio version
-vers <- "1.1" # or "1.2"
+vers <- "1.2" # or "1.1"
 
 # should results be saved to file?
 write = TRUE
@@ -32,17 +32,28 @@ X <- readRDS(file=paste0("/mnt/nfs_fineprint/tmp/fabio/v",vers,"/X.rds")) # tota
 
 # load and prepare extensions
 E <- readRDS(file=paste0("/mnt/nfs_fineprint/tmp/fabio/v",vers,"/E.rds")) # environmental extensions
-E_ghg <- readRDS(file=paste0("/mnt/nfs_fineprint/tmp/fabio/v",vers,"/gwp.rds"))
-E_luh <- readRDS(file=paste0("/mnt/nfs_fineprint/tmp/fabio/v",vers,"/luh.rds"))
+E_ghg <- readRDS(file=paste0("/mnt/nfs_fineprint/tmp/fabio/v",vers,"/E_gwp_value.rds"))
+E_luh <- readRDS(file=paste0("/mnt/nfs_fineprint/tmp/fabio/v",vers,"/E_luh_value.rds"))
 items_ghg <- read.csv(paste0("/mnt/nfs_fineprint/tmp/fabio/v",vers,"/gwp_names.csv"))
 items_luh <- read.csv(paste0("/mnt/nfs_fineprint/tmp/fabio/v",vers,"/luh_names.csv"))
+E_biodiv <- readRDS(file=paste0("/mnt/nfs_fineprint/tmp/fabio/v",vers,"/E_biodiv.rds"))
+items_biodiv <- read.csv(paste0("/mnt/nfs_fineprint/tmp/fabio/v",vers,"/biodiv_codes.csv"))
 
 # aggregate emission categories
 E_ghg_agg <- lapply(E_ghg, colSums)
 E_luh2_agg <- lapply(E_luh, function(x){colSums(x[grep("5 years", items_luh$Element),])})
 
+# convert potential species loss to E/MSY
+E_biodiv <- lapply(E_biodiv, function(x){
+  x <- t(t(x[,8:27]) / items_biodiv$number * 1000000 / 200)
+  colnames(x) <- items_biodiv$land
+  x <- agg(x)
+})
+
 # bind with E table
-E_all <- Map(function(e, e_ghg, e_luh){cbind(e,"ghg" = e_ghg*1000, "luh" = e_luh*1000)},E, E_ghg_agg, E_luh2_agg)
+E_all <- Map(function(e, e_biodiv, e_ghg, e_luh){
+  cbind(e, "biodiv" = e_biodiv[,"cropland"]+e_biodiv[,"pasture"], "ghg" = e_ghg*1000, "luh" = e_luh*1000)},
+  E, E_biodiv, E_ghg_agg, E_luh2_agg)
 
 # read region classification
 regions <- fread(file=paste0("/mnt/nfs_fineprint/tmp/fabio/v",vers,"/regions.csv"))
@@ -54,8 +65,8 @@ nrcom <- nrow(items)
 index <- data.table(area_code = rep(regions$code, each = nrcom),
                     iso3c = rep(regions$iso3c, each = nrcom),
                     area = rep(regions$name, each = nrcom),
-                    continent = rep(regions$continent, each = nrcom),  # v1.1
-                    # continent = rep(regions$region, each = nrcom),  # v1.2
+                    # continent = rep(regions$continent, each = nrcom),  # v1.1
+                    continent = rep(regions$region, each = nrcom),  # v1.2
                     comm_code = rep(items$comm_code, nrreg),
                     item_code = rep(items$item_code, nrreg),
                     item = rep(items$item, nrreg),
