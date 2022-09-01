@@ -382,7 +382,9 @@ stacked_bars <- function(fp_list, indicator = "landuse", per_capita = FALSE,
       axis.title.y = element_markdown(face = "bold", size = 10))
   
   if(bound) {
-    fp_plot <- fp_plot + geom_hline(yintercept = pbs[indicator], color = "red")
+    fp_plot <- fp_plot + 
+      geom_hline(yintercept = pbs[indicator, "lower"], color = "darkgreen", size = 1.0)+
+      geom_hline(yintercept = pbs[indicator, "upper"], color = "red", size = 1.0)
   }
   
   return(fp_plot)
@@ -406,7 +408,7 @@ stacked_data <- function(fp_list, indicator = "landuse", per_capita = FALSE,
 
 
 
-# circle planetary boundary plot
+# circle planetary boundary plot --------------------
 
 circle_plot <- function(fp_table, diet, ylim.max = 4, ylim.min = 0, log = FALSE){
   
@@ -486,7 +488,7 @@ circle_plot_grad <- function(fp_table, diet, ylim.max = 4, ylim.min = 0, log = F
   title = ifelse(diet %in% c("sq", "Staus Quo"),"Staus Quo", ifelse(diet %in% c("eat", "Planetary Health"),"Planetary Health Diet",ifelse(diet %in% c("epo", "Ernährungspyramide"),"Ernährungspyramide",NA)))
   
   
-  fp_circle_scen <- data.frame(ind = as.character(names(fp_spider[-1])), 
+  fp_circle_scen <- data.frame(ind = as.factor(names(fp_spider[-1])), 
                                value = unlist(fp_spider[diet_index,][-1]),
                                limit = ifelse(unlist(fp_spider[diet_index,])[-1] > ifelse(log, 0, 1), "yes", "no"))
   
@@ -494,7 +496,7 @@ circle_plot_grad <- function(fp_table, diet, ylim.max = 4, ylim.min = 0, log = F
   fp_circle_scen_exp <- fp_circle_scen %>%
      rowwise() %>%
     summarise(ind = ind,
-              value = list(seq(value,0, by = -0.05))) %>%
+              value = list(seq(value,0, by = -0.01))) %>%
     unnest(cols = value)
   
   plt <- ggplot(fp_circle_scen_exp) +
@@ -504,6 +506,20 @@ circle_plot_grad <- function(fp_table, diet, ylim.max = 4, ylim.min = 0, log = F
       color = "lightgrey",
       alpha = 0.9
     ) + 
+    geom_hline(
+      aes(yintercept = y), 
+      data.frame(y = c(0.5:(ylim.max-1.5))),
+      color = "lightgrey",
+      alpha = 0.9,
+      size = 0.2
+    ) + 
+   # geom_vline(
+   #  #aes(xintercept = x), 
+   #  xintercept = "Stickstoff",
+   #  #data.frame(x = as.factor(names(fp_spider[-1]))),
+   #   color = "lightgrey",
+   #   alpha = 0.9
+   # ) + 
     geom_col(
       aes(
         x = ind,
@@ -511,23 +527,31 @@ circle_plot_grad <- function(fp_table, diet, ylim.max = 4, ylim.min = 0, log = F
         #group = seq(0,value, by = 0.05),
         fill = value
       ),
-      aes = 0.9,
+      #aes = 0.9,
       color = "transparent",
       position = "identity",
       show.legend = TRUE,
-      alpha = 0.8
+      alpha = 1,
+      width = 0.95
     ) +
     geom_hline(
       aes(yintercept = y), 
       data.frame(y = c(ifelse(log, 0,1))),
-      color = "blue",
+      color = "darkgreen",
       size = 0.8,
       alpha = 0.8
     ) + 
+    geom_hline(
+      aes(yintercept = y), 
+      data.frame(y = c(ifelse(log, log(2),2))),
+      color = "darkred",
+      size = 0.8,
+      alpha = 0.8
+    ) +
     # Make it circular!
     #scale_fill_manual(values = c("yes" = "red", "no" = "green")) +
-    scale_fill_gradientn(colors = c("darkgreen", "green", "yellow", "red", "firebrick"), 
-                         values = scales::rescale(c(0,0.8, 1.5, 2,4)),
+    scale_fill_gradientn(colors = c("white", "green4", "chartreuse", "yellow", "orange", "red", "firebrick", "transparent"), 
+                         values = scales::rescale(c(0, 0.5, 0.9, 1.1, 1.9, 2.1, 3, 4)),
                          limits = c(0, ylim.max),
                          name = "Wert relativ\nzum Grenzwert") + # "Value relative to\nplanetary boundary"
     #scale_fill_gradient2(low = "darkgreen", mid =  "yellow", high =  "firebrick", midpoint = 1.2, limits = c(0,4)) +
