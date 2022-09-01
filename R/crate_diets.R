@@ -8,29 +8,29 @@ library(Matrix)
 # load data ---------------------------------------
 
 # select fabio version
-vers <- "1.1" # or "1.2"
+vers <- "1.2" # or "1.2"
 
 if (vers == "1.1"){
-  eat_conc <- as.data.table(openxlsx::read.xlsx("inst/items_conc.xlsx", sheet = "concordance_1.1"))
-  eat_diet <- as.data.table(openxlsx::read.xlsx("inst/items_conc.xlsx", sheet = "eat_diet", startRow = 2))
-  epo_diet <- as.data.table(openxlsx::read.xlsx("inst/items_conc.xlsx", sheet = "epo_diet", startRow = 1))
-  epo_portions <- as.data.table(openxlsx::read.xlsx("inst/items_conc.xlsx", sheet = "epo_portionsize", startRow = 1))
-  fao_comp <- as.data.table(openxlsx::read.xlsx("inst/items_conc.xlsx", sheet = "fao_composition_1.1", startRow = 2))
-  waste_shares <- as.data.table(openxlsx::read.xlsx("inst/items_conc.xlsx", sheet = "waste"))
-  loss_shares <- as.data.table(openxlsx::read.xlsx("inst/items_conc.xlsx", sheet = "loss_1.1"))
+  eat_conc <- as.data.table(readxl::read_excel("inst/items_conc.xlsx", sheet = "concordance_1.1", na = "NA"))
+  eat_diet <- as.data.table(readxl::read_excel("inst/items_conc.xlsx", sheet = "eat_diet", skip = 1, na = "NA"))
+  epo_diet <- as.data.table(readxl::read_excel("inst/items_conc.xlsx", sheet = "epo_diet", na = "NA"))
+  epo_portions <- as.data.table(readxl::read_excel("inst/items_conc.xlsx", sheet = "epo_portionsize", na = "NA"))
+  fao_comp <- as.data.table(readxl::read_excel("inst/items_conc.xlsx", sheet = "fao_composition_1.1", skip = 1, na = "NA"))
+  waste_shares <- as.data.table(readxl::read_excel("inst/items_conc.xlsx", sheet = "waste", na = "NA"))
+  loss_shares <- as.data.table(readxl::read_excel("inst/items_conc.xlsx", sheet = "loss_1.1", na = "NA"))
   cbs <- readRDS("data/v1.1/cbs_tidy_food.rds")
   cbs_pop <- readRDS("data/v1.1/cbs_pop.rds")
   Y <- readRDS("/mnt/nfs_fineprint/tmp/fabio/v1.1/losses/Y.rds")
   io_codes <- fread("/mnt/nfs_fineprint/tmp/fabio/v1.1/io_codes.csv")
   yr = 2013
 } else {
-  eat_conc <- as.data.table(openxlsx::read.xlsx("inst/items_conc.xlsx", sheet = "concordance"))
-  eat_diet <- as.data.table(openxlsx::read.xlsx("inst/items_conc.xlsx", sheet = "eat_diet", startRow = 2))
-  epo_diet <- as.data.table(openxlsx::read.xlsx("inst/items_conc.xlsx", sheet = "epo_diet", startRow = 1))
-  epo_portions <- as.data.table(openxlsx::read.xlsx("inst/items_conc.xlsx", sheet = "epo_portionsize", startRow = 1))
-  fao_comp <- as.data.table(openxlsx::read.xlsx("inst/items_conc.xlsx", sheet = "fao_composition", startRow = 2))
-  waste_shares <- as.data.table(openxlsx::read.xlsx("inst/items_conc.xlsx", sheet = "waste"))
-  loss_shares <- as.data.table(openxlsx::read.xlsx("inst/items_conc.xlsx", sheet = "loss"))
+  eat_conc <- as.data.table(readxl::read_excel("inst/items_conc.xlsx", sheet = "concordance", na = "NA"))
+  eat_diet <- as.data.table(readxl::read_excel("inst/items_conc.xlsx", sheet = "eat_diet", skip = 1, na = "NA"))
+  epo_diet <- as.data.table(readxl::read_excel("inst/items_conc.xlsx", sheet = "epo_diet", na = "NA"))
+  epo_portions <- as.data.table(readxl::read_excel("inst/items_conc.xlsx", sheet = "epo_portionsize", na = "NA"))
+  fao_comp <- as.data.table(readxl::read_excel("inst/items_conc.xlsx", sheet = "fao_composition", skip = 1, na = "NA"))
+  waste_shares <- as.data.table(readxl::read_excel("inst/items_conc.xlsx", sheet = "waste", na = "NA"))
+  loss_shares <- as.data.table(readxl::read_excel("inst/items_conc.xlsx", sheet = "loss", na = "NA"))
   cbs <- readRDS("data/v1.2/cbs_tidy_food.rds")
   cbs_pop <- readRDS("data/v1.2/cbs_pop.rds")
   Y <- readRDS("/mnt/nfs_fineprint/tmp/fabio/v1.2/losses/Y.rds")
@@ -204,4 +204,4 @@ cbs_food_tot <- cbs_food[, .(food_kcal_pc_day = sum(food_kcal_pc_day)), by = c("
 
 # save final demand table ----------------------------------------------
 Y_food_aut <- select(Y_food_aut, -c(kcal_g:prot_g, g_port,waste_fin, loss))
-saveRDS(Y_food_aut, file = ifelse(vers == "1.1", "data/v1.1/Y_food_aut_2013.rds", "data/v1.2/Y_food_aut_2013.rds"))
+saveRDS(Y_food_aut, file = ifelse(vers == "1.1", "data/v1.1/Y_food_aut_2013.rds", "data/v1.2/Y_food_aut_2019.rds"))
