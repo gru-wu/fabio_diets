@@ -21,39 +21,55 @@ library(openxlsx)
 source("R/footprint_functions.R")
 
 # select fabio version
-vers <- "1.2" # or "1.1"
+vers <- "1.1" # or "1.1"
+yr = 2013
 
 # should results be saved to file?
 write = TRUE
 
 # load FABIO data
-Y_food_aut <- readRDS(paste0("data/v",vers,"/Y_food_aut_2013.rds"))
+Y_food_aut <- readRDS(paste0("data/v",vers,"/Y_food_aut_",yr,".rds"))
 X <- readRDS(file=paste0("/mnt/nfs_fineprint/tmp/fabio/v",vers,"/X.rds")) # total output
 
 # load and prepare extensions
 E <- readRDS(file=paste0("/mnt/nfs_fineprint/tmp/fabio/v",vers,"/E.rds")) # environmental extensions
-E_ghg <- readRDS(file=paste0("/mnt/nfs_fineprint/tmp/fabio/v",vers,"/E_gwp_value.rds"))
-E_luh <- readRDS(file=paste0("/mnt/nfs_fineprint/tmp/fabio/v",vers,"/E_luh_value.rds"))
-items_ghg <- read.csv(paste0("/mnt/nfs_fineprint/tmp/fabio/v",vers,"/gwp_names.csv"))
-items_luh <- read.csv(paste0("/mnt/nfs_fineprint/tmp/fabio/v",vers,"/luh_names.csv"))
-E_biodiv <- readRDS(file=paste0("/mnt/nfs_fineprint/tmp/fabio/v",vers,"/E_biodiv.rds"))
-items_biodiv <- read.csv(paste0("/mnt/nfs_fineprint/tmp/fabio/v",vers,"/biodiv_codes.csv"))
+if (vers == "1.1"){
+  E_ghg <- readRDS(file=paste0("/mnt/nfs_fineprint/tmp/fabio/v",vers,"/gwp.rds"))
+  E_luh <- readRDS(file=paste0("/mnt/nfs_fineprint/tmp/fabio/v",vers,"/luh.rds"))
+  items_ghg <- read.csv(paste0("/mnt/nfs_fineprint/tmp/fabio/v",vers,"/gwp_names.csv"))
+  items_luh <- read.csv(paste0("/mnt/nfs_fineprint/tmp/fabio/v",vers,"/luh_names.csv"))
+} else if (vers == "1.2"){
+  E_ghg <- readRDS(file=paste0("/mnt/nfs_fineprint/tmp/fabio/v",vers,"/E_gwp_value.rds"))
+  E_luh <- readRDS(file=paste0("/mnt/nfs_fineprint/tmp/fabio/v",vers,"/E_luh_value.rds"))
+  items_ghg <- read.csv(paste0("/mnt/nfs_fineprint/tmp/fabio/v",vers,"/gwp_names.csv"))
+  items_luh <- read.csv(paste0("/mnt/nfs_fineprint/tmp/fabio/v",vers,"/luh_names.csv"))
+  E_biodiv <- readRDS(file=paste0("/mnt/nfs_fineprint/tmp/fabio/v",vers,"/E_biodiv.rds"))
+  items_biodiv <- read.csv(paste0("/mnt/nfs_fineprint/tmp/fabio/v",vers,"/biodiv_codes.csv"))
+}
 
 # aggregate emission categories
 E_ghg_agg <- lapply(E_ghg, colSums)
 E_luh2_agg <- lapply(E_luh, function(x){colSums(x[grep("5 years", items_luh$Element),])})
 
 # convert potential species loss to E/MSY
-E_biodiv <- lapply(E_biodiv, function(x){
-  x <- t(t(x[,8:27]) / items_biodiv$number * 1000000 / 200)
-  colnames(x) <- items_biodiv$land
-  x <- agg(x)
-})
+if (vers == "1.2"){
+  E_biodiv <- lapply(E_biodiv, function(x){
+    x <- t(t(x[,8:27]) / items_biodiv$number * 1000000 / 200)
+    colnames(x) <- items_biodiv$land
+    x <- agg(x)
+  })
+}
 
 # bind with E table
-E_all <- Map(function(e, e_biodiv, e_ghg, e_luh){
-  cbind(e, "biodiv" = e_biodiv[,"cropland"]+e_biodiv[,"pasture"], "ghg" = e_ghg*1000, "luh" = e_luh*1000)},
-  E, E_biodiv, E_ghg_agg, E_luh2_agg)
+if(vers == "1.1"){
+  E_all <- Map(function(e, e_ghg, e_luh){
+    cbind(e, "ghg" = e_ghg*1000, "luh" = e_luh*1000)
+    }, E, E_ghg_agg, E_luh2_agg)
+  } else if(vers == 1.2){
+  E_all <- Map(function(e, e_biodiv, e_ghg, e_luh){
+    cbind(e, "biodiv" = e_biodiv[,"cropland"]+e_biodiv[,"pasture"], "ghg" = e_ghg*1000, "luh" = e_luh*1000)
+    }, E, E_biodiv, E_ghg_agg, E_luh2_agg)
+}
 
 # read region classification
 regions <- fread(file=paste0("/mnt/nfs_fineprint/tmp/fabio/v",vers,"/regions.csv"))
@@ -65,8 +81,7 @@ nrcom <- nrow(items)
 index <- data.table(area_code = rep(regions$code, each = nrcom),
                     iso3c = rep(regions$iso3c, each = nrcom),
                     area = rep(regions$name, each = nrcom),
-                    # continent = rep(regions$continent, each = nrcom),  # v1.1
-                    continent = rep(regions$region, each = nrcom),  # v1.2
+                    continent = rep(regions[[ifelse(vers == "1.1", "continent", "region")]], each = nrcom),
                     comm_code = rep(items$comm_code, nrreg),
                     item_code = rep(items$item_code, nrreg),
                     item = rep(items$item, nrreg),
@@ -83,26 +98,49 @@ food_cols <- openxlsx::read.xlsx("inst/items_conc.xlsx", sheet = "colors_alt", c
 food_cols_vect <- food_cols$X2
 names(food_cols_vect) <- food_cols$X1
 
-# per-capita planetary bondaries from Willett et al
-pbs <- c(
-  #"land_ha" = 13 * 1e6 / 10e9 * 100,
-  "landuse" = 13 * 1e6 / 10e9 * 1e6, # in m2
-  "blue" = 2500 / 10e9 * 1e9, # in m3
-  "ghg_all" = 5 * 1e9 / 10e9, # in t
-  "biodiv" = 10 / 10e9 * 10e6, # in 10-6 species
-  "n_application" = 90 * 1e9 / 10e9, # in kg
-  "p_application" = 8 * 1e9 / 10e9 # in kg
+## per-capita planetary bondaries from Willett et al
+#pbs <- c(
+#  #"land_ha" = 13 * 1e6 / 10e9 * 100,
+#  "landuse" = 13 * 1e6 / 10e9 * 1e6, # in m2
+#  "blue" = 2500 / 10e9 * 1e9, # in m3
+#  "ghg_all" = 5 * 1e9 / 10e9, # in t
+#  "biodiv" = 10 / 10e9 * 10e6, # in 10-6 species
+#  "n_application" = 90 * 1e9 / 10e9, # in kg
+#  "p_application" = 8 * 1e9 / 10e9 # in kg
+#)
+
+# global planetary boundaries (lower bound - upper bound)
+pbs_global <- rbind(
+  #"boundary" = c("lower", "upper"),
+  "landuse" = c(11, 15),
+  "blue" = c(1000, 4000),
+  "ghg_all" = c(4.7, 5.4),
+  "biodiv" = c(1,80),
+  "n_application" = c(65, 130),
+  "p_application" = c(6,16)
+)
+colnames(pbs_global) <- c("lower", "upper")
+
+# transform into per-capita values in appropriate units
+per_cap_factor <- c(  
+  "landuse" = 1e6 / 10e9 * 1e6, # from mio km2 to m2 pc
+  "blue" = 1e9 / 10e9  , # from km3 to m3 pc
+  "ghg_all" =  1e9 / 10e9, # from Gt to t pc
+  "biodiv" = 1e6 / 10e9, # from species to 10-6 species pc
+  "n_application" = 1e9 / 10e9, # from Tg to kg pc
+  "p_application" = 1e9 / 10e9 # from Tg to kg pc
 )
 
+pbs <- pbs_global*per_cap_factor
 
 #-------------------------------------------------------#
 # ---------------- Calculate Footprints  ---------------
 #-------------------------------------------------------#
 
 # run calculations (see function library)
-fp_sq_2013 <- footprint(country = "AUT",  allocation = "value", year = 2013, y = Y_food_aut$food_t_pc, X = X, E = E_all, v = vers)
-fp_eat_2013 <- footprint(country = "AUT",  allocation = "value", year = 2013, y = Y_food_aut$eat_t_pc, X = X, E = E_all, v = vers)
-fp_epo_2013 <- footprint(country = "AUT",  allocation = "value", year = 2013, y = Y_food_aut$epo_t_pc, X = X, E = E_all, v = vers)
+fp_sq <- footprint(country = "AUT",  allocation = "value", year = yr, y = Y_food_aut$food_t_pc, X = X, E = E_all, v = vers)
+fp_eat <- footprint(country = "AUT",  allocation = "value", year = yr, y = Y_food_aut$eat_t_pc, X = X, E = E_all, v = vers)
+fp_epo <- footprint(country = "AUT",  allocation = "value", year = yr, y = Y_food_aut$epo_t_pc, X = X, E = E_all, v = vers)
 
 
 #######.
@@ -111,54 +149,54 @@ fp_epo_2013 <- footprint(country = "AUT",  allocation = "value", year = 2013, y 
 ######.
 
 # add total emission footprints
-fp_sq_2013[, ghg_all := ghg + luh]
-fp_eat_2013[, ghg_all := ghg + luh]
-fp_epo_2013[, ghg_all := ghg + luh]
+fp_sq[, ghg_all := ghg + luh]
+fp_eat[, ghg_all := ghg + luh]
+fp_epo[, ghg_all := ghg + luh]
 
 # remove pastures from landuse
-fp_sq_2013$landuse[fp_sq_2013$item_origin=="Grazing"] <- 0
-fp_eat_2013$landuse[fp_eat_2013$item_origin=="Grazing"] <- 0
-fp_epo_2013$landuse[fp_epo_2013$item_origin=="Grazing"] <- 0
+fp_sq$landuse[fp_sq$item_origin=="Grazing"] <- 0
+fp_eat$landuse[fp_eat$item_origin=="Grazing"] <- 0
+fp_epo$landuse[fp_epo$item_origin=="Grazing"] <- 0
 
 # convert landuse from ha to m2
-fp_sq_2013$landuse <- fp_sq_2013$landuse * 10000
-fp_eat_2013$landuse <- fp_eat_2013$landuse * 10000
-fp_epo_2013$landuse <- fp_epo_2013$landuse * 10000
+fp_sq$landuse <- fp_sq$landuse * 10000
+fp_eat$landuse <- fp_eat$landuse * 10000
+fp_epo$landuse <- fp_epo$landuse * 10000
 
 # add german names
-fp_sq_2013 <- merge(fp_sq_2013, items_ger[,.(item, comm_group_ger)], by.x = c("item_target"), by.y = c("item"), all.x = TRUE, sort = FALSE)
-fp_eat_2013 <- merge(fp_eat_2013, items_ger[,.(item, comm_group_ger)], by.x = c("item_target"), by.y = c("item"), all.x = TRUE, sort = FALSE)
-fp_epo_2013 <- merge(fp_epo_2013, items_ger[,.(item, comm_group_ger)], by.x = c("item_target"), by.y = c("item"), all.x = TRUE, sort = FALSE)
+fp_sq <- merge(fp_sq, items_ger[,.(item, comm_group_ger)], by.x = c("item_target"), by.y = c("item"), all.x = TRUE, sort = FALSE)
+fp_eat <- merge(fp_eat, items_ger[,.(item, comm_group_ger)], by.x = c("item_target"), by.y = c("item"), all.x = TRUE, sort = FALSE)
+fp_epo <- merge(fp_epo, items_ger[,.(item, comm_group_ger)], by.x = c("item_target"), by.y = c("item"), all.x = TRUE, sort = FALSE)
 
 # save results
 if (write){ 
-  saveRDS(fp_sq_2013, "./plots/fp_sq_2013.rds")
-  saveRDS(fp_eat_2013, "./plots/fp_eat_2013.rds")
-  saveRDS(fp_epo_2013, "./plots/fp_epo_2013.rds")
+  saveRDS(fp_sq, paste0("./plots/fp_sq_",yr,".rds"))
+  saveRDS(fp_eat, paste0("./plots/fp_eat_",yr,".rds"))
+  saveRDS(fp_epo, paste0("./plots/fp_epo_",yr,".rds"))
 }
 
 # aggregate as desired (see function library)
-fp_sq_2013_agg <- fp_aggregate(fp_sq_2013, aggregate_by = c("country_consumer"), indicators = c("landuse", "blue", "ghg", "luh", "ghg_all", "biomass", "biodiv", "n_application", "p_application"))
-fp_eat_2013_agg <- fp_aggregate(fp_eat_2013, aggregate_by = c("country_consumer"), indicators = c("landuse", "blue", "ghg", "luh", "ghg_all", "biomass", "biodiv", "n_application", "p_application"))
-fp_epo_2013_agg <- fp_aggregate(fp_epo_2013, aggregate_by = c("country_consumer"), indicators = c("landuse", "blue", "ghg", "luh", "ghg_all", "biomass", "biodiv", "n_application", "p_application"))
+fp_sq_agg <- fp_aggregate(fp_sq, aggregate_by = c("country_consumer"), indicators = c("landuse", "blue", "ghg", "luh", "ghg_all", "biomass", "biodiv", "n_application", "p_application"))
+fp_eat_agg <- fp_aggregate(fp_eat, aggregate_by = c("country_consumer"), indicators = c("landuse", "blue", "ghg", "luh", "ghg_all", "biomass", "biodiv", "n_application", "p_application"))
+fp_epo_agg <- fp_aggregate(fp_epo, aggregate_by = c("country_consumer"), indicators = c("landuse", "blue", "ghg", "luh", "ghg_all", "biomass", "biodiv", "n_application", "p_application"))
 
-fp_sq_2013_agg_crop <- fp_aggregate(fp_sq_2013[group_origin != "Grazing",], aggregate_by = c("country_consumer"), indicators = c("landuse", "blue", "ghg", "luh", "ghg_all", "biomass", "biodiv", "n_application", "p_application"))
-fp_eat_2013_agg_crop <- fp_aggregate(fp_eat_2013[group_origin != "Grazing",], aggregate_by = c("country_consumer"), indicators = c("landuse", "blue", "ghg", "luh", "ghg_all", "biomass", "biodiv", "n_application", "p_application"))
-fp_epo_2013_agg_crop <- fp_aggregate(fp_epo_2013[group_origin != "Grazing",], aggregate_by = c("country_consumer"), indicators = c("landuse", "blue", "ghg", "luh", "ghg_all", "biomass", "biodiv", "n_application", "p_application"))
+#fp_sq_agg_crop <- fp_aggregate(fp_sq[group_origin != "Grazing",], aggregate_by = c("country_consumer"), indicators = c("landuse", "blue", "ghg", "luh", "ghg_all", "biomass", "biodiv", "n_application", "p_application"))
+#fp_eat_agg_crop <- fp_aggregate(fp_eat[group_origin != "Grazing",], aggregate_by = c("country_consumer"), indicators = c("landuse", "blue", "ghg", "luh", "ghg_all", "biomass", "biodiv", "n_application", "p_application"))
+#fp_epo_agg_crop <- fp_aggregate(fp_epo[group_origin != "Grazing",], aggregate_by = c("country_consumer"), indicators = c("landuse", "blue", "ghg", "luh", "ghg_all", "biomass", "biodiv", "n_application", "p_application"))
 
-fp_sq_2013_group  <- fp_aggregate(fp_sq_2013, aggregate_by = c("country_consumer", "comm_group_ger"), indicators = c("landuse", "blue", "ghg", "luh", "ghg_all", "biomass", "biodiv", "n_application", "p_application"))
-fp_eat_2013_group <- fp_aggregate(fp_eat_2013, aggregate_by = c("country_consumer", "comm_group_ger"), indicators = c("landuse", "blue", "ghg", "luh", "ghg_all", "biomass", "biodiv", "n_application", "p_application"))
-fp_epo_2013_group <- fp_aggregate(fp_epo_2013, aggregate_by = c("country_consumer", "comm_group_ger"), indicators = c("landuse", "blue", "ghg", "luh", "ghg_all", "biomass", "biodiv", "n_application", "p_application"))
+fp_sq_group  <- fp_aggregate(fp_sq, aggregate_by = c("country_consumer", "comm_group_ger"), indicators = c("landuse", "blue", "ghg", "luh", "ghg_all", "biomass", "biodiv", "n_application", "p_application"))
+fp_eat_group <- fp_aggregate(fp_eat, aggregate_by = c("country_consumer", "comm_group_ger"), indicators = c("landuse", "blue", "ghg", "luh", "ghg_all", "biomass", "biodiv", "n_application", "p_application"))
+fp_epo_group <- fp_aggregate(fp_epo, aggregate_by = c("country_consumer", "comm_group_ger"), indicators = c("landuse", "blue", "ghg", "luh", "ghg_all", "biomass", "biodiv", "n_application", "p_application"))
 
-fp_sq_2013_continent_group <- fp_aggregate(fp_sq_2013, aggregate_by = c("continent_origin", "comm_group_ger"), indicators = c("landuse", "blue", "ghg", "luh", "ghg_all", "biomass", "biodiv", "n_application", "p_application"))
-fp_eat_2013_continent_group <- fp_aggregate(fp_eat_2013, aggregate_by = c("continent_origin", "comm_group_ger"), indicators = c("landuse", "blue", "ghg", "luh", "ghg_all", "biomass", "biodiv", "n_application", "p_application"))
-fp_epo_2013_continent_group <- fp_aggregate(fp_epo_2013, aggregate_by = c("continent_origin", "comm_group_ger"), indicators = c("landuse", "blue", "ghg", "luh", "ghg_all", "biomass", "biodiv", "n_application", "p_application"))
+fp_sq_continent_group <- fp_aggregate(fp_sq, aggregate_by = c("continent_origin", "comm_group_ger"), indicators = c("landuse", "blue", "ghg", "luh", "ghg_all", "biomass", "biodiv", "n_application", "p_application"))
+fp_eat_continent_group <- fp_aggregate(fp_eat, aggregate_by = c("continent_origin", "comm_group_ger"), indicators = c("landuse", "blue", "ghg", "luh", "ghg_all", "biomass", "biodiv", "n_application", "p_application"))
+fp_epo_continent_group <- fp_aggregate(fp_epo, aggregate_by = c("continent_origin", "comm_group_ger"), indicators = c("landuse", "blue", "ghg", "luh", "ghg_all", "biomass", "biodiv", "n_application", "p_application"))
 
-fp_sq_2013_country <- fp_aggregate(fp_sq_2013, aggregate_by = c("country_consumer", "country_origin"), indicators = c("landuse", "blue", "ghg", "luh", "ghg_all", "biomass", "biodiv", "n_application", "p_application"))
-fp_eat_2013_country <- fp_aggregate(fp_eat_2013, aggregate_by = c("country_consumer", "country_origin"), indicators = c("landuse", "blue", "ghg", "luh", "ghg_all", "biomass", "biodiv", "n_application", "p_application"))
-fp_epo_2013_country <- fp_aggregate(fp_epo_2013, aggregate_by = c("country_consumer", "country_origin"), indicators = c("landuse", "blue", "ghg", "luh", "ghg_all", "biomass", "biodiv", "n_application", "p_application"))
+fp_sq_country <- fp_aggregate(fp_sq, aggregate_by = c("country_consumer", "country_origin"), indicators = c("landuse", "blue", "ghg", "luh", "ghg_all", "biomass", "biodiv", "n_application", "p_application"))
+fp_eat_country <- fp_aggregate(fp_eat, aggregate_by = c("country_consumer", "country_origin"), indicators = c("landuse", "blue", "ghg", "luh", "ghg_all", "biomass", "biodiv", "n_application", "p_application"))
+fp_epo_country <- fp_aggregate(fp_epo, aggregate_by = c("country_consumer", "country_origin"), indicators = c("landuse", "blue", "ghg", "luh", "ghg_all", "biomass", "biodiv", "n_application", "p_application"))
 
-fp_limits <- rbind(fp_sq_2013_country, fp_eat_2013_country, fp_epo_2013_country) %>% 
+fp_limits <- rbind(fp_sq_country, fp_eat_country, fp_epo_country) %>% 
                         filter(country_origin != "AUT") %>% 
                         group_by(country_consumer) %>% 
                         summarise(across(landuse:ghg_all, max))
@@ -182,13 +220,13 @@ world_map <- getMap(resolution = "low") %>%
 ### Cropland ------
 
 # land footprint of overall food consumption in AUT
-(fp_map_landuse_sq <- fp_map(fp = fp_sq_2013[fp_sq_2013$country_origin != "AUT"], map = world_map, indicator = "landuse",
+(fp_map_landuse_sq <- fp_map(fp = fp_sq[fp_sq$country_origin != "AUT"], map = world_map, indicator = "landuse",
                               origin_items = "ALL", target_items = "ALL", limits = c(0, fp_limits$landuse),
                               title = "Pro-Kopf Flächenfußabruck der aktuellen Ernährung in Österreich"))
-(fp_map_landuse_eat <- fp_map(fp = fp_eat_2013[fp_eat_2013$country_origin != "AUT"], map = world_map, indicator = "landuse",
+(fp_map_landuse_eat <- fp_map(fp = fp_eat[fp_eat$country_origin != "AUT"], map = world_map, indicator = "landuse",
                              origin_items = "ALL", target_items = "ALL", limits = c(0, fp_limits$landuse),
                              title = "Pro-Kopf Flächenfußabruck der Planetary Health Diet für Österreich"))
-(fp_map_landuse_epo <- fp_map(fp = fp_epo_2013[fp_epo_2013$country_origin != "AUT"], map = world_map, indicator = "landuse",
+(fp_map_landuse_epo <- fp_map(fp = fp_epo[fp_epo$country_origin != "AUT"], map = world_map, indicator = "landuse",
                               origin_items = "ALL", target_items = "ALL", limits = c(0, fp_limits$landuse),
                               title = "Pro-Kopf Flächenfußabruck der österreichischen Ernährungspyramide"))
 
@@ -198,61 +236,61 @@ world_map <- getMap(resolution = "low") %>%
 #                               title = "Pro-Kopf Flächenfußabruck des aktuellen Fleischkonsums in Österreich"))
 
 ### Water ------
-(fp_map_blue_sq <- fp_map(fp = fp_sq_2013[fp_sq_2013$country_origin != "AUT"], map = world_map, indicator = "blue",
+(fp_map_blue_sq <- fp_map(fp = fp_sq[fp_sq$country_origin != "AUT"], map = world_map, indicator = "blue",
                            origin_items = "ALL", target_items = "ALL",  limits = c(0, fp_limits$blue),
                            title = "Pro-Kopf Süßwasserfußabdruck der aktuellen Ernährung in Österreich"))
 
-(fp_map_blue_eat <- fp_map(fp = fp_eat_2013[fp_eat_2013$country_origin != "AUT"], map = world_map, indicator = "blue",
+(fp_map_blue_eat <- fp_map(fp = fp_eat[fp_eat$country_origin != "AUT"], map = world_map, indicator = "blue",
                           origin_items = "ALL", target_items = "ALL", limits = c(0, fp_limits$blue),
                           title = "Pro-Kopf Süßwasserfußabdruck der Planetary Health Diet für Österreich"))
 
-(fp_map_blue_epo <- fp_map(fp = fp_epo_2013[fp_epo_2013$country_origin != "AUT"], map = world_map, indicator = "blue",
+(fp_map_blue_epo <- fp_map(fp = fp_epo[fp_epo$country_origin != "AUT"], map = world_map, indicator = "blue",
                            origin_items = "ALL", target_items = "ALL", limits = c(0, fp_limits$blue),
                            title = "Pro-Kopf Süßwasserfußabdruck der österreichischen Ernährungspyramide"))
 
 # emission footprint
-(fp_map_ghg_sq <- fp_map(fp = fp_sq_2013[fp_sq_2013$country_origin != "AUT"], map = world_map, indicator = "ghg_all",
+(fp_map_ghg_sq <- fp_map(fp = fp_sq[fp_sq$country_origin != "AUT"], map = world_map, indicator = "ghg_all",
                            origin_items = "ALL", target_items = "ALL", limits = c(0, fp_limits$ghg_all),
                            title = "Pro-Kopf Emissionsfußabruck der aktuellen Ernährung in Österreich"))
 
-(fp_map_ghg_eat <- fp_map(fp = fp_eat_2013[fp_eat_2013$country_origin != "AUT"], map = world_map, indicator = "ghg_all",
+(fp_map_ghg_eat <- fp_map(fp = fp_eat[fp_eat$country_origin != "AUT"], map = world_map, indicator = "ghg_all",
                          origin_items = "ALL", target_items = "ALL", limits = c(0, fp_limits$ghg_all),
                          title = "Pro-Kopf Emissionsfußabruck der Planetary Health Diet für Österreich"))
 
-(fp_map_ghg_epo <- fp_map(fp = fp_epo_2013[fp_epo_2013$country_origin != "AUT"], map = world_map, indicator = "ghg_all",
+(fp_map_ghg_epo <- fp_map(fp = fp_epo[fp_epo$country_origin != "AUT"], map = world_map, indicator = "ghg_all",
                           origin_items = "ALL", target_items = "ALL", limits = c(0, fp_limits$ghg_all),
                           title = "Pro-Kopf Emissionsfußabruck der österreichischen Ernährungspyramide"))
 
 ### Biodiversity ------
-(fp_map_biodiv_sq <- fp_map(fp = fp_sq_2013[fp_sq_2013$country_origin != "AUT"], map = world_map, indicator = "biodiv",
+(fp_map_biodiv_sq <- fp_map(fp = fp_sq[fp_sq$country_origin != "AUT"], map = world_map, indicator = "biodiv",
                          origin_items = "ALL", target_items = "ALL", limits = c(0, fp_limits$biodiv),
                          title = "Pro-Kopf Biodiversitätsfußabdruck der aktuellen Ernährung in Österreich"))
-(fp_map_biodiv_eat <- fp_map(fp = fp_eat_2013[fp_eat_2013$country_origin != "AUT"], map = world_map, indicator = "biodiv",
+(fp_map_biodiv_eat <- fp_map(fp = fp_eat[fp_eat$country_origin != "AUT"], map = world_map, indicator = "biodiv",
                           origin_items = "ALL", target_items = "ALL", limits = c(0, fp_limits$biodiv),
                           title = "Pro-Kopf Biodiversitätsfußabdruck der Planetary Health Diet für Österreich"))
-(fp_map_biodiv_epo <- fp_map(fp = fp_epo_2013[fp_epo_2013$country_origin != "AUT"], map = world_map, indicator = "biodiv",
+(fp_map_biodiv_epo <- fp_map(fp = fp_epo[fp_epo$country_origin != "AUT"], map = world_map, indicator = "biodiv",
                           origin_items = "ALL", target_items = "ALL", limits = c(0, fp_limits$biodiv),
                           title = "Pro-Kopf Biodiversitätsfußabdruck der österreichischen Ernährungspyramide"))
 
 ### N application ------
-(fp_map_n_sq <- fp_map(fp = fp_sq_2013[fp_sq_2013$country_origin != "AUT"], map = world_map, indicator = "n_application",
+(fp_map_n_sq <- fp_map(fp = fp_sq[fp_sq$country_origin != "AUT"], map = world_map, indicator = "n_application",
                             origin_items = "ALL", target_items = "ALL", limits = c(0, fp_limits$n_application),
                             title = "Pro-Kopf Stickstoffeinsatz der aktuellen Ernährung in Österreich"))
-(fp_map_n_eat <- fp_map(fp = fp_eat_2013[fp_eat_2013$country_origin != "AUT"], map = world_map, indicator = "n_application",
+(fp_map_n_eat <- fp_map(fp = fp_eat[fp_eat$country_origin != "AUT"], map = world_map, indicator = "n_application",
                              origin_items = "ALL", target_items = "ALL", limits = c(0, fp_limits$n_application),
                              title = "Pro-Kopf Stickstoffeinsatz der Planetary Health Diet für Österreich"))
-(fp_map_n_epo <- fp_map(fp = fp_epo_2013[fp_epo_2013$country_origin != "AUT"], map = world_map, indicator = "n_application",
+(fp_map_n_epo <- fp_map(fp = fp_epo[fp_epo$country_origin != "AUT"], map = world_map, indicator = "n_application",
                              origin_items = "ALL", target_items = "ALL", limits = c(0, fp_limits$n_application),
                              title = "Pro-Kopf Stickstoffeinsatz der österreichischen Ernährungspyramide"))
 
 ### P application ------
-(fp_map_p_sq <- fp_map(fp = fp_sq_2013[fp_sq_2013$country_origin != "AUT"], map = world_map, indicator = "p_application",
+(fp_map_p_sq <- fp_map(fp = fp_sq[fp_sq$country_origin != "AUT"], map = world_map, indicator = "p_application",
                        origin_items = "ALL", target_items = "ALL", limits = c(0, fp_limits$p_application),
                        title = "Pro-Kopf Phosphoreinsatz der aktuellen Ernährung in Österreich"))
-(fp_map_p_eat <- fp_map(fp = fp_eat_2013[fp_eat_2013$country_origin != "AUT"], map = world_map, indicator = "p_application",
+(fp_map_p_eat <- fp_map(fp = fp_eat[fp_eat$country_origin != "AUT"], map = world_map, indicator = "p_application",
                         origin_items = "ALL", target_items = "ALL", limits = c(0, fp_limits$p_application),
                         title = "Pro-Kopf Phosphoreinsatz der Planetary Health Diet für Österreich"))
-(fp_map_p_epo <- fp_map(fp = fp_epo_2013[fp_epo_2013$country_origin != "AUT"], map = world_map, indicator = "p_application",
+(fp_map_p_epo <- fp_map(fp = fp_epo[fp_epo$country_origin != "AUT"], map = world_map, indicator = "p_application",
                         origin_items = "ALL", target_items = "ALL", limits = c(0, fp_limits$p_application),
                         title = "Pro-Kopf Phosphoreinsatz der österreichischen Ernährungspyramide"))
 
@@ -282,7 +320,7 @@ if (write) {
 
 }
 
-fp_map_data <- lapply(list("map_sq" = fp_sq_2013, "map_epo" = fp_epo_2013,  "map_eat" = fp_eat_2013), fp_aggregate, aggregate_by = c("country_origin"))
+fp_map_data <- lapply(list("map_sq" = fp_sq, "map_epo" = fp_epo,  "map_eat" = fp_eat), fp_aggregate, aggregate_by = c("country_origin"))
 #fp_map_data_df <- fp_map_data %>% reduce(full_join, by='country_origin') 
 #write.xlsx(file = "plots/plot_data.xlsx", fp_map_data)
 #plot_data <- fp_map_data
@@ -307,19 +345,19 @@ fp_map_data <- lapply(list("map_sq" = fp_sq_2013, "map_epo" = fp_epo_2013,  "map
 # this is due to an issue in the used package ggmosaic and will hopefully be resolved soon
 
 ### Cropland --------------------------------
-(mosaic_land_sq <- fp_mosaic(fp = fp_sq_2013, indicator = "landuse", aggregate_by = c("comm_group_ger", "continent_origin"),
+(mosaic_land_sq <- fp_mosaic(fp = fp_sq, indicator = "landuse", aggregate_by = c("comm_group_ger", "continent_origin"),
                              divide_by_cells = 1, divide_by_axis = 1, axis_label = expression(paste("Anbaufläche in ", m^2)),
                              display_min = 10, round_digs = 0,
                              plot_title = "Flächenfußabruck je Region und Produktgruppe",
                              tick_offset = c(0,-0.0033,-0.006,-0.006,-0.004,-0.004,-0.002,-0.001, -0.001)*1e4))
 
-(mosaic_land_eat <- fp_mosaic(fp = fp_eat_2013, indicator = "landuse", aggregate_by = c("comm_group_ger", "continent_origin"),
+(mosaic_land_eat <- fp_mosaic(fp = fp_eat, indicator = "landuse", aggregate_by = c("comm_group_ger", "continent_origin"),
                              divide_by_cells = 1, divide_by_axis = 1, axis_label = expression(paste("Anbaufläche in ", m^2)),
                              display_min = 10, round_digs = 0,
                              plot_title = "Flächenfußabruck je Region und Produktgruppe",
                              tick_offset = c(0,-0.0033,-0.006,-0.006,-0.004,-0.004,-0.002,-0.001,-0.001)*1e4))
 
-(mosaic_land_epo <- fp_mosaic(fp = fp_epo_2013, indicator = "landuse", aggregate_by = c("comm_group_ger", "continent_origin"),
+(mosaic_land_epo <- fp_mosaic(fp = fp_epo, indicator = "landuse", aggregate_by = c("comm_group_ger", "continent_origin"),
                               divide_by_cells = 1, divide_by_axis = 1, axis_label = expression(paste("Anbaufläche in ", m^2)),
                               display_min = 10, round_digs = 0,
                               plot_title = "Flächenfußabruck je Region und Produktgruppe",
@@ -327,19 +365,19 @@ fp_map_data <- lapply(list("map_sq" = fp_sq_2013, "map_epo" = fp_epo_2013,  "map
 
 
 ### Water --------------------------------
-(mosaic_water_sq <- fp_mosaic(fp = fp_sq_2013, indicator = "blue", aggregate_by = c("comm_group_ger", "continent_origin"),
+(mosaic_water_sq <- fp_mosaic(fp = fp_sq, indicator = "blue", aggregate_by = c("comm_group_ger", "continent_origin"),
                              divide_by_cells = 1, divide_by_axis = 1, axis_label = expression(paste("Wasserinsatz in ", m^3)),
                              display_min = 0.5, round_digs = 2,
                              plot_title = "Wasserfußabruck je Region und Produktgruppe",
                              tick_offset = c(0,-0.0033,-0.006,-0.006,-0.004,-0.004,-0.002,-0.001,-0.001)))
 
-(mosaic_water_eat <- fp_mosaic(fp = fp_eat_2013, indicator = "blue", aggregate_by = c("comm_group_ger", "continent_origin"),
+(mosaic_water_eat <- fp_mosaic(fp = fp_eat, indicator = "blue", aggregate_by = c("comm_group_ger", "continent_origin"),
                               divide_by_cells = 1, divide_by_axis = 1, axis_label = expression(paste("Wasserinsatz in ", m^3)),
                               display_min = 0.5, round_digs = 2,
                               plot_title = "Wasserfußabruck je Region und Produktgruppe",
                               tick_offset = c(0,-0.0033,-0.006,-0.006,-0.004,-0.004,-0.002,-0.001,-0.001)))
 
-(mosaic_water_epo <- fp_mosaic(fp = fp_epo_2013, indicator = "blue", aggregate_by = c("comm_group_ger", "continent_origin"),
+(mosaic_water_epo <- fp_mosaic(fp = fp_epo, indicator = "blue", aggregate_by = c("comm_group_ger", "continent_origin"),
                                divide_by_cells = 1, divide_by_axis = 1, axis_label = expression(paste("Wasserinsatz in ", m^3)),
                                display_min = 0.5, round_digs = 2,
                                plot_title = "Wasserfußabruck je Region und Produktgruppe",
@@ -347,76 +385,76 @@ fp_map_data <- lapply(list("map_sq" = fp_sq_2013, "map_epo" = fp_epo_2013,  "map
 
 
 ### GHG --------------------------------
-(mosaic_ghg_sq <- fp_mosaic(fp = fp_sq_2013, indicator = "ghg_all", aggregate_by = c("comm_group_ger", "continent_origin"),
+(mosaic_ghg_sq <- fp_mosaic(fp = fp_sq, indicator = "ghg_all", aggregate_by = c("comm_group_ger", "continent_origin"),
                               divide_by_cells = 1e-3, divide_by_axis = 1e-3, axis_label = expression(paste("THG-Emissionen in kg ", CO[2],"-Äq.")),
                               display_min = 10, round_digs = 0,
                               plot_title = "Emissionsfußabruck je Region und Produktgruppe",
                               tick_offset = c(0,-0.0033,-0.006,-0.006,-0.004,-0.004,-0.002,-0.001,-0.001)))
 
-(mosaic_ghg_eat <- fp_mosaic(fp = fp_eat_2013, indicator = "ghg_all", aggregate_by = c("comm_group_ger", "continent_origin"),
+(mosaic_ghg_eat <- fp_mosaic(fp = fp_eat, indicator = "ghg_all", aggregate_by = c("comm_group_ger", "continent_origin"),
                                divide_by_cells = 1e-3, divide_by_axis = 1e-3, axis_label = expression(paste("THG-Emissionen in kg ", CO[2],"-Äq.")),
                                display_min = 10, round_digs = 0,
                                plot_title = "Emissionsfußabruck je Region und Produktgruppe",
                                tick_offset = c(0,-0.0033,-0.006,-0.006,-0.004,-0.004,-0.002,-0.001,-0.001)))
 
-(mosaic_ghg_epo <- fp_mosaic(fp = fp_epo_2013, indicator = "ghg_all", aggregate_by = c("comm_group_ger", "continent_origin"),
+(mosaic_ghg_epo <- fp_mosaic(fp = fp_epo, indicator = "ghg_all", aggregate_by = c("comm_group_ger", "continent_origin"),
                              divide_by_cells = 1e-3, divide_by_axis = 1e-3, axis_label = expression(paste("THG-Emissionen in kg ", CO[2],"-Äq.")),
                              display_min = 10, round_digs = 0,
                              plot_title = "Emissionsfußabruck je Region und Produktgruppe",
                              tick_offset = c(0,-0.0033,-0.006,-0.006,-0.004,-0.004,-0.002,-0.001,-0.001)))
 
 ### Biodiversity --------------------------------
-(mosaic_biodiv_sq <- fp_mosaic(fp = fp_sq_2013, indicator = "biodiv", aggregate_by = c("comm_group_ger", "continent_origin"),
+(mosaic_biodiv_sq <- fp_mosaic(fp = fp_sq, indicator = "biodiv", aggregate_by = c("comm_group_ger", "continent_origin"),
                             divide_by_cells = 1e-3, divide_by_axis = 1e-3, axis_label = expression(paste("Biodiversitätsverlust in ", 10^9," Arten")),
                             display_min = 10, round_digs = 0,
                             plot_title = "Biodiversitätsfußabruck je Region und Produktgruppe",
                             tick_offset = c(0,-0.0033,-0.006,-0.006,-0.004,-0.004,-0.002,-0.001,-0.001)))
 
-(mosaic_biodiv_eat <- fp_mosaic(fp = fp_eat_2013, indicator = "biodiv", aggregate_by = c("comm_group_ger", "continent_origin"),
+(mosaic_biodiv_eat <- fp_mosaic(fp = fp_eat, indicator = "biodiv", aggregate_by = c("comm_group_ger", "continent_origin"),
                              divide_by_cells = 1e-3, divide_by_axis = 1e-3, axis_label = expression(paste("Biodiversitätsverlust in ", 10^9," Arten")),
                              display_min = 10, round_digs = 0,
                              plot_title = "Biodiversitätsfußabruck je Region und Produktgruppe",
                              tick_offset = c(0,-0.0033,-0.006,-0.006,-0.004,-0.004,-0.002,-0.001,-0.001)))
 
-(mosaic_biodiv_epo <- fp_mosaic(fp = fp_epo_2013, indicator = "biodiv", aggregate_by = c("comm_group_ger", "continent_origin"),
+(mosaic_biodiv_epo <- fp_mosaic(fp = fp_epo, indicator = "biodiv", aggregate_by = c("comm_group_ger", "continent_origin"),
                              divide_by_cells = 1e-3, divide_by_axis = 1e-3, axis_label = expression(paste("Biodiversitätsverlust in ", 10^9," Arten")),
                              display_min = 10, round_digs = 0,
                              plot_title = "Biodiversitätsfußabruck je Region und Produktgruppe",
                              tick_offset = c(0,-0.0033,-0.006,-0.006,-0.004,-0.004,-0.002,-0.001)))
 
 ### N Application --------------------------------
-(mosaic_n_sq <- fp_mosaic(fp = fp_sq_2013, indicator = "n_application", aggregate_by = c("comm_group_ger", "continent_origin"),
+(mosaic_n_sq <- fp_mosaic(fp = fp_sq, indicator = "n_application", aggregate_by = c("comm_group_ger", "continent_origin"),
                             divide_by_cells = 1e-3, divide_by_axis = 1e-3, axis_label = "Stickstoffeinsatz in g",
                             display_min = 10, round_digs = 0,
                             plot_title = "Stickstoffeinsatz je Region und Produktgruppe",
                             tick_offset = c(0,-0.0033,-0.006,-0.006,-0.004,-0.004,-0.002,-0.001,-0.001)))
 
-(mosaic_n_eat <- fp_mosaic(fp = fp_eat_2013, indicator = "n_application", aggregate_by = c("comm_group_ger", "continent_origin"),
+(mosaic_n_eat <- fp_mosaic(fp = fp_eat, indicator = "n_application", aggregate_by = c("comm_group_ger", "continent_origin"),
                            divide_by_cells = 1e-3, divide_by_axis = 1e-3, axis_label = "Stickstoffeinsatz in g",
                            display_min = 10, round_digs = 0,
                            plot_title = "Stickstoffeinsatz je Region und Produktgruppe",
                            tick_offset = c(0,-0.0033,-0.006,-0.006,-0.004,-0.004,-0.002,-0.001,-0.001)))
 
-(mosaic_n_epo <- fp_mosaic(fp = fp_epo_2013, indicator = "n_application", aggregate_by = c("comm_group_ger", "continent_origin"),
+(mosaic_n_epo <- fp_mosaic(fp = fp_epo, indicator = "n_application", aggregate_by = c("comm_group_ger", "continent_origin"),
                            divide_by_cells = 1e-3, divide_by_axis = 1e-3, axis_label = "Stickstoffeinsatz in g",
                            display_min = 10, round_digs = 0,
                            plot_title = "Stickstoffeinsatz je Region und Produktgruppe",
                            tick_offset = c(0,-0.0033,-0.006,-0.006,-0.004,-0.004,-0.002,-0.001,-0.001)))
 
 ### P Application --------------------------------
-(mosaic_p_sq <- fp_mosaic(fp = fp_sq_2013, indicator = "p_application", aggregate_by = c("comm_group_ger", "continent_origin"),
+(mosaic_p_sq <- fp_mosaic(fp = fp_sq, indicator = "p_application", aggregate_by = c("comm_group_ger", "continent_origin"),
                           divide_by_cells = 1e-3, divide_by_axis = 1e-3, axis_label = "Phosphoreinsatz in g",
                           display_min = 10, round_digs = 0,
                           plot_title = "Phosphoreinsatz je Region und Produktgruppe",
                           tick_offset = c(0,-0.0033,-0.006,-0.006,-0.004,-0.004,-0.002,-0.001,-0.001)))
 
-(mosaic_p_eat <- fp_mosaic(fp = fp_eat_2013, indicator = "p_application", aggregate_by = c("comm_group_ger", "continent_origin"),
+(mosaic_p_eat <- fp_mosaic(fp = fp_eat, indicator = "p_application", aggregate_by = c("comm_group_ger", "continent_origin"),
                            divide_by_cells = 1e-3, divide_by_axis = 1e-3, axis_label = "Phosphoreinsatz in g",
                            display_min = 10, round_digs = 0,
                              plot_title = "Phosphoreinsatz je Region und Produktgruppe",
                              tick_offset = c(0,-0.0033,-0.006,-0.006,-0.004,-0.004,-0.002,-0.001,-0.001)))
 
-(mosaic_p_epo <- fp_mosaic(fp = fp_epo_2013, indicator = "p_application", aggregate_by = c("comm_group_ger", "continent_origin"),
+(mosaic_p_epo <- fp_mosaic(fp = fp_epo, indicator = "p_application", aggregate_by = c("comm_group_ger", "continent_origin"),
                            divide_by_cells = 1e-3, divide_by_axis = 1e-3, axis_label = "Phosphoreinsatz in g",
                            display_min = 10, round_digs = 0,
                              plot_title = "Phosphoreinsatz je Region und Produktgruppe",
@@ -453,7 +491,7 @@ if (write) {
 }
 
 ## save data
-fp_mosaic_data <- lapply(list("mosaic_sq" = fp_sq_2013,  "mosaic_epo" = fp_epo_2013,  "mosaic_eat" = fp_eat_2013), 
+fp_mosaic_data <- lapply(list("mosaic_sq" = fp_sq,  "mosaic_epo" = fp_epo,  "mosaic_eat" = fp_eat), 
                        fp_aggregate, 
                        aggregate_by =  c("group_target", "continent_origin"))
 #plot_data <- c(plot_data, fp_mosaic_data)
@@ -470,7 +508,7 @@ Y_agg_long <- Y_agg %>%
   filter(g > 0) %>%
   mutate(diet_lab = ifelse(diet == "food", "Status Quo", ifelse(diet == "eat", "Planetary Health Diet", "Ernährungspyramide")))
 
-food_cols_vect_sel <- food_cols_alt_vect[names(food_cols_alt_vect) %in% unique(Y_agg_long$comm_group_ger)]
+food_cols_vect_sel <- food_cols_vect[names(food_cols_vect) %in% unique(Y_agg_long$comm_group_ger)]
 
 # plot
 (diet_plot_g <- ggplot(Y_agg_long, 
@@ -521,7 +559,7 @@ indicator_labs <- c(landuse = "Anbaufläche  in m<sup>2</sup>",
                     n_application = "Stickstoffeinsatz in kg")
 
 pb_stack_list <- sapply(indicators, function(ind){
-  stacked_bars(fp_list = list("sq" = fp_sq_2013,  "epo" = fp_epo_2013, "eat" = fp_eat_2013), 
+  stacked_bars(fp_list = list("sq" = fp_sq,  "epo" = fp_epo, "eat" = fp_eat), 
                indicator = ind, axis_lab = indicator_labs[ind], bound = TRUE)
 }, simplify = FALSE, USE.NAMES = TRUE)
 
@@ -532,7 +570,7 @@ if(write) ggsave("plots/pb_stack.png", pb_stack, width = 30, height = 25, units 
 
 # save data
 pb_stack_data <- sapply(indicators, function(ind){
-  stacked_data(fp_list = list("sq" = fp_sq_2013,  "eat" = fp_eat_2013,  "epo" = fp_epo_2013), 
+  stacked_data(fp_list = list("sq" = fp_sq,  "eat" = fp_eat,  "epo" = fp_epo), 
                indicator = ind)
 }, simplify = FALSE, USE.NAMES = TRUE)
 pb_stack_data <- pb_stack_data %>% reduce(full_join, by=c('comm_group_ger', 'diet', 'diet_lab')) 
@@ -543,9 +581,9 @@ pb_stack_data <- pb_stack_data %>% reduce(full_join, by=c('comm_group_ger', 'die
 
 
 # aggregate indicators
-fp_agg <- as.data.frame(rbind(fp_sq_2013_agg, fp_epo_2013_agg, fp_eat_2013_agg))
-fp_agg_land <- as.data.frame(rbind(fp_sq_2013_agg_crop, fp_epo_2013_agg_crop, fp_eat_2013_agg_crop))
-fp_agg$landuse <- fp_agg_land$landuse
+fp_agg <- as.data.frame(rbind(fp_sq_agg, fp_epo_agg, fp_eat_agg))
+#fp_agg_land <- as.data.frame(rbind(fp_sq_agg_crop, fp_epo_agg_crop, fp_eat_agg_crop))
+#fp_agg$landuse <- fp_agg_land$landuse
 
 fp_agg$diet <- factor(c("Status \nQuo", "Ernährungs- \npyramide", "Planetary \nHealth Diet"), levels = c("Status \nQuo", "Ernährungs- \npyramide", "Planetary \nHealth Diet"))
 #fp_agg_land$diet <- factor(c("Status \nQuo", "Planetary \nHealth Diet", "Ernährungs- \npyramide"), levels = c("Status \nQuo", "Planetary \nHealth Diet", "Ernährungs- \npyramide"))
@@ -554,7 +592,8 @@ fp_agg$diet <- factor(c("Status \nQuo", "Ernährungs- \npyramide", "Planetary \n
 (pb_bar_land <- ggplot(fp_agg, aes(x = diet, y = landuse)) + #/ 10000
   # geom_bar(stat="identity", fill = "#176040") +
     geom_bar(stat="identity", fill = viridis(6)[1]) +
-    geom_abline(intercept = pbs["landuse"], slope = 0, color = "red") +
+    geom_abline(intercept = pbs["landuse", "upper"], slope = 0, color = "red", size = 1) +
+    geom_abline(intercept = pbs["landuse", "lower"], slope = 0, color = "darkgreen", size = 1) +
   labs(y = "Flächenverbrauch in m<sup>2</sup>", x = "") +
   theme_minimal()+
   theme(axis.title.y = element_markdown()))
@@ -562,37 +601,42 @@ fp_agg$diet <- factor(c("Status \nQuo", "Ernährungs- \npyramide", "Planetary \n
 (pb_bar_water <- ggplot(fp_agg, aes(x = diet, y = blue)) +
     # geom_bar(stat="identity", fill = "#293969") +
     geom_bar(stat="identity", fill = viridis(6)[2]) +
-    geom_abline(intercept = pbs["blue"], slope = 0, color = "red") +
+    geom_abline(intercept = pbs["blue", "upper"], slope = 0, color = "red", size = 1) +
+    geom_abline(intercept = pbs["blue", "lower"], slope = 0, color = "darkgreen", size = 1) +
     labs(y = "Wasserverbrauch in m<sup>3</sup>", x = "")+
-    coord_cartesian(ylim = c(0, 250))+
+    coord_cartesian(ylim = c(0, pbs["blue", "upper"]))+
     theme_minimal()+
     theme(axis.title.y = element_markdown()))
 
 (pb_bar_ghg <- ggplot(fp_agg, aes(x = diet, y = ghg_all)) +
     # geom_bar(stat="identity", fill = "#521f11") +
     geom_bar(stat="identity", fill = viridis(6)[3]) +
-    geom_abline(intercept = pbs["ghg_all"], slope = 0, color = "red") +
+    geom_abline(intercept = pbs["ghg_all", "upper"], slope = 0, color = "red", size = 1) +
+    geom_abline(intercept = pbs["ghg_all", "lower"], slope = 0, color = "darkgreen", size = 1) +
     labs(y = "Emissionen in t CO<sub>2</sub>-Äq.", x = "")+
     theme_minimal()+
     theme(axis.title.y = element_markdown()))
 
 (pb_bar_biodiv <- ggplot(fp_agg, aes(x = diet, y = biodiv)) +
     geom_bar(stat="identity", fill = viridis(6)[4]) +
-    geom_abline(intercept = pbs["biodiv"], slope = 0, color = "red") +
+    geom_abline(intercept = pbs["biodiv", "upper"], slope = 0, color = "red", size = 1) +
+    geom_abline(intercept = pbs["biodiv", "lower"], slope = 0, color = "darkgreen", size = 1) +
     labs(y = "Biodiversitätsverlust in 10^-6 Arten", x = "")+
     theme_minimal()+
     theme(axis.title.y = element_markdown()))
 
 (pb_bar_n <- ggplot(fp_agg, aes(x = diet, y = n_application)) +
     geom_bar(stat="identity", fill = viridis(6)[5]) +
-    geom_abline(intercept = pbs["n_application"], slope = 0, color = "red") +
+    geom_abline(intercept = pbs["n_application", "upper"], slope = 0, color = "red", size = 1) +
+    geom_abline(intercept = pbs["n_application", "lower"], slope = 0, color = "darkgreen", size = 1) +
     labs(y = "Stickstoffeinsatz in kg", x = "")+
     theme_minimal()+
     theme(axis.title.y = element_markdown()))
 
 (pb_bar_p <- ggplot(fp_agg, aes(x = diet, y = p_application)) +
     geom_bar(stat="identity", fill = viridis(6)[6]) +
-    geom_abline(intercept = pbs["p_application"], slope = 0, color = "red") +
+    geom_abline(intercept = pbs["p_application", "upper"], slope = 0, color = "red", size = 1) +
+    geom_abline(intercept = pbs["p_application", "lower"], slope = 0, color = "darkgreen", size = 1) +
     labs(y = "Phosphoreinsatz in kg", x = "")+
     theme_minimal()+
     theme(axis.title.y = element_markdown()))
@@ -610,12 +654,13 @@ if (write) {
 
 ## Spiderweb chart -----------------------
 
-fp_spider <- fp_agg %>% rename(group = diet) %>%
+fp_agg_sel <- fp_agg %>% rename(group = diet) %>%
   select(c(group, landuse, blue, ghg_all, biodiv, n_application, p_application)) %>%
   rename(Flächenverbrauch = landuse, Wasserverbrauch = blue, Emissionen = ghg_all, Biodiversität = biodiv, Stickstoff = n_application, Phosphor = p_application)
 
 # rescale by pb values
-fp_spider[,2:7] <- t(t(fp_spider[,2:7])/pbs)
+fp_spider <- fp_agg_sel
+fp_spider[,2:7] <- t(t(fp_agg_sel[,2:7])/pbs[, "lower"])
 fp_spider <- mutate(fp_spider, Biodiversität = Biodiversität/10)
 
 fp_spider_log <- fp_spider
@@ -648,7 +693,12 @@ if (write) ggsave("plots/pb_spiderweb.png", pb_spider, width = 10, units = "cm",
 
 ## Circular planetary boundary chart (experimental) -------------
 
-pb_circle <- sapply(c("sq", "epo", "eat"), circle_plot_grad, fp_table = fp_spider, ylim.min = -0.1, ylim.max = 4, log = FALSE,
+# rescale values
+pbs <- cbind(pbs, "range" = pbs[,"upper"] - pbs[,"lower"])
+fp_circle <- fp_agg_sel
+fp_circle[,2:7] <- t((t(fp_agg_sel[,2:7])-pbs[, "lower"])/pbs[, "range"])+1
+
+pb_circle <- sapply(c("sq", "epo", "eat"), circle_plot_grad, fp_table = fp_circle, ylim.min = -0.0, ylim.max = 4, log = FALSE,
                     simplify = FALSE, USE.NAMES = TRUE)
 (pb_circle <- wrap_plots(pb_circle, guides = "collect") & theme(legend.position = 'bottom',
                                                                  legend.direction = 'horizontal'))
