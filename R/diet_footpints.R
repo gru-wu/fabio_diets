@@ -516,7 +516,7 @@ food_cols_vect_sel <- food_cols_vect[names(food_cols_vect) %in% unique(Y_agg_lon
                          y = g, fill = factor(comm_group_ger, levels = rev(names(food_cols_vect_sel))))) +
   geom_bar(stat="identity", alpha = 0.85) +
   scale_fill_manual(values = food_cols_vect_sel, name = "", guide = guide_legend()) +
-  labs(y = "Gramm pro Kopf und Tag", x = "") +
+  labs(y = "Gramm pro Kopf und Tag", x = NULL) +
   coord_flip() +
   theme_minimal() +
   theme(legend.position = "bottom", legend.direction="horizontal", legend.box = "horizontal",
@@ -527,7 +527,7 @@ food_cols_vect_sel <- food_cols_vect[names(food_cols_vect) %in% unique(Y_agg_lon
                            y = kcal, fill = factor(comm_group_ger, levels = rev(names(food_cols_vect_sel))))) +
     geom_bar(stat="identity", alpha = 0.85) +
     scale_fill_manual(values = food_cols_vect_sel, name = "", guide = guide_legend()) +
-    labs(y = "Kcal pro Kopf und Tag", x = "") +
+    labs(y = "Kcal pro Kopf und Tag", x = NULL) +
     coord_flip() +
     theme_minimal() +
     theme(legend.position = "bottom", legend.direction="horizontal", legend.box = "horizontal",
@@ -592,18 +592,20 @@ fp_agg$diet <- factor(c("Status \nQuo", "Ernährungs- \npyramide", "Planetary \n
 (pb_bar_land <- ggplot(fp_agg, aes(x = diet, y = landuse)) + #/ 10000
   # geom_bar(stat="identity", fill = "#176040") +
     geom_bar(stat="identity", fill = viridis(6)[1]) +
-    geom_abline(intercept = pbs["landuse", "upper"], slope = 0, color = "red", size = 1) +
-    geom_abline(intercept = pbs["landuse", "lower"], slope = 0, color = "darkgreen", size = 1) +
-  labs(y = "Flächenverbrauch in m<sup>2</sup>", x = "") +
+    geom_hline(aes(yintercept = pbs["landuse", "upper"], color = "Obergrenze der Unsicherheitszone"), size = 1) +
+    geom_hline(aes(yintercept = pbs["landuse", "lower"], color = "Planetare Belastungsgrenze"), size = 1) +
+    scale_color_manual(values = c("Planetare Belastungsgrenze" = "darkgreen", "Obergrenze der Unsicherheitszone" = "red")) + 
+  labs(y = "Flächenverbrauch in m<sup>2</sup>", x = NULL, color = NULL) +
   theme_minimal()+
   theme(axis.title.y = element_markdown()))
 
 (pb_bar_water <- ggplot(fp_agg, aes(x = diet, y = blue)) +
     # geom_bar(stat="identity", fill = "#293969") +
     geom_bar(stat="identity", fill = viridis(6)[2]) +
-    geom_abline(intercept = pbs["blue", "upper"], slope = 0, color = "red", size = 1) +
-    geom_abline(intercept = pbs["blue", "lower"], slope = 0, color = "darkgreen", size = 1) +
-    labs(y = "Wasserverbrauch in m<sup>3</sup>", x = "")+
+    geom_hline(aes(yintercept = pbs["blue", "upper"], color = "Obergrenze der Unsicherheitszone"), size = 1) +
+    geom_hline(aes(yintercept = pbs["blue", "lower"], color = "Planetare Belastungsgrenze"), size = 1) +
+    scale_color_manual(values = c("Planetare Belastungsgrenze" = "darkgreen", "Obergrenze der Unsicherheitszone" = "red")) + 
+    labs(y = "Wasserverbrauch in m<sup>3</sup>", x = NULL, color = NULL)+
     coord_cartesian(ylim = c(0, pbs["blue", "upper"]))+
     theme_minimal()+
     theme(axis.title.y = element_markdown()))
@@ -611,37 +613,42 @@ fp_agg$diet <- factor(c("Status \nQuo", "Ernährungs- \npyramide", "Planetary \n
 (pb_bar_ghg <- ggplot(fp_agg, aes(x = diet, y = ghg_all)) +
     # geom_bar(stat="identity", fill = "#521f11") +
     geom_bar(stat="identity", fill = viridis(6)[3]) +
-    geom_abline(intercept = pbs["ghg_all", "upper"], slope = 0, color = "red", size = 1) +
-    geom_abline(intercept = pbs["ghg_all", "lower"], slope = 0, color = "darkgreen", size = 1) +
-    labs(y = "Emissionen in t CO<sub>2</sub>-Äq.", x = "")+
+    geom_hline(aes(yintercept = pbs["ghg_all", "upper"], color = "Obergrenze der Unsicherheitszone"), size = 1) +
+    geom_hline(aes(yintercept = pbs["ghg_all", "lower"], color = "Planetare Belastungsgrenze"), size = 1) +
+    scale_color_manual(values = c("Planetare Belastungsgrenze" = "darkgreen", "Obergrenze der Unsicherheitszone" = "red")) + 
+    labs(y = "Emissionen in t CO<sub>2</sub>-Äq.", x = NULL, color = NULL)+
     theme_minimal()+
     theme(axis.title.y = element_markdown()))
 
 (pb_bar_biodiv <- ggplot(fp_agg, aes(x = diet, y = biodiv)) +
     geom_bar(stat="identity", fill = viridis(6)[4]) +
-    geom_abline(intercept = pbs["biodiv", "upper"], slope = 0, color = "red", size = 1) +
-    geom_abline(intercept = pbs["biodiv", "lower"], slope = 0, color = "darkgreen", size = 1) +
-    labs(y = "Biodiversitätsverlust in 10^-6 Arten", x = "")+
+    geom_hline(aes(yintercept = pbs["biodiv", "upper"], color = "Obergrenze der Unsicherheitszone"), size = 1) +
+    geom_hline(aes(yintercept = pbs["biodiv", "lower"], color = "Planetare Belastungsgrenze"), size = 1) +
+    scale_color_manual(values = c("Planetare Belastungsgrenze" = "darkgreen", "Obergrenze der Unsicherheitszone" = "red")) + 
+    labs(y = "Biodiversitätsverlust in 10^-6 Arten", x = NULL, color = NULL)+
     theme_minimal()+
     theme(axis.title.y = element_markdown()))
 
 (pb_bar_n <- ggplot(fp_agg, aes(x = diet, y = n_application)) +
     geom_bar(stat="identity", fill = viridis(6)[5]) +
-    geom_abline(intercept = pbs["n_application", "upper"], slope = 0, color = "red", size = 1) +
-    geom_abline(intercept = pbs["n_application", "lower"], slope = 0, color = "darkgreen", size = 1) +
-    labs(y = "Stickstoffeinsatz in kg", x = "")+
+    geom_hline(aes(yintercept = pbs["n_application", "upper"], color = "Obergrenze der Unsicherheitszone"), size = 1) +
+    geom_hline(aes(yintercept = pbs["n_application", "lower"], color = "Planetare Belastungsgrenze"), size = 1) +
+    scale_color_manual(values = c("Planetare Belastungsgrenze" = "darkgreen", "Obergrenze der Unsicherheitszone" = "red")) + 
+    labs(y = "Stickstoffeinsatz in kg", x = NULL, color = NULL)+
     theme_minimal()+
     theme(axis.title.y = element_markdown()))
 
 (pb_bar_p <- ggplot(fp_agg, aes(x = diet, y = p_application)) +
     geom_bar(stat="identity", fill = viridis(6)[6]) +
-    geom_abline(intercept = pbs["p_application", "upper"], slope = 0, color = "red", size = 1) +
-    geom_abline(intercept = pbs["p_application", "lower"], slope = 0, color = "darkgreen", size = 1) +
-    labs(y = "Phosphoreinsatz in kg", x = "")+
+    geom_hline(aes(yintercept = pbs["p_application", "upper"], color = "Obergrenze der Unsicherheitszone"), size = 1) +
+    geom_hline(aes(yintercept = pbs["p_application", "lower"], color = "Planetare Belastungsgrenze"), size = 1) +
+    scale_color_manual(values = c("Planetare Belastungsgrenze" = "darkgreen", "Obergrenze der Unsicherheitszone" = "red")) + 
+    labs(y = "Phosphoreinsatz in kg", x = NULL, color = NULL)+
     theme_minimal()+
     theme(axis.title.y = element_markdown()))
 
-(pb_bar <- pb_bar_land + pb_bar_water + pb_bar_ghg + pb_bar_biodiv + pb_bar_n + pb_bar_p)
+(pb_bar <- pb_bar_land + pb_bar_water + pb_bar_ghg + pb_bar_biodiv + pb_bar_n + pb_bar_p + plot_layout(guides = "collect") 
+  & theme(legend.position = "bottom"))
 
 # save plot
 if (write) {
@@ -698,9 +705,9 @@ pbs <- cbind(pbs, "range" = pbs[,"upper"] - pbs[,"lower"])
 fp_circle <- fp_agg_sel
 fp_circle[,2:7] <- t((t(fp_agg_sel[,2:7])-pbs[, "lower"])/pbs[, "range"])+1
 
-pb_circle <- sapply(c("sq", "epo", "eat"), circle_plot_grad, fp_table = fp_circle, ylim.min = -0.0, ylim.max = 4, log = FALSE,
+pb_circle <- sapply(c("sq", "epo", "eat"), circle_plot_grad, fp_table = fp_circle, ylim.min = -0.0, ylim.max = 4, log = FALSE, legend = FALSE,
                     simplify = FALSE, USE.NAMES = TRUE)
-(pb_circle <- wrap_plots(pb_circle, guides = "collect") & theme(legend.position = 'bottom',
+(pb_circle <- wrap_plots(pb_circle, guides = "collect", nrow = 1) & theme(legend.position = 'bottom',
                                                                  legend.direction = 'horizontal'))
 
 if (write) ggsave("plots/pb_circle.png", pb_circle, width = 30, units = "cm", scale = 1)

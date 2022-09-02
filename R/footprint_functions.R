@@ -383,9 +383,12 @@ stacked_bars <- function(fp_list, indicator = "landuse", per_capita = FALSE,
   
   if(bound) {
     fp_plot <- fp_plot + 
-      geom_hline(yintercept = pbs[indicator, "lower"], color = "darkgreen", size = 1.0)+
-      geom_hline(yintercept = pbs[indicator, "upper"], color = "red", size = 1.0)
-  }
+      geom_hline(aes(yintercept = pbs[indicator, "lower"], color = "Planetare Belastungsgrenze"), size = 1.0)+
+      geom_hline(aes(yintercept = pbs[indicator, "upper"], color = "Obergrenze der Unsicherheitszone"), size = 1.0) +
+      scale_color_manual(values = c("Planetare Belastungsgrenze" = "darkgreen", "Obergrenze der Unsicherheitszone" = "red")) + 
+      labs(color = NULL)+
+      guides(color=guide_legend(direction='vertical'))
+    }
   
   return(fp_plot)
 }
@@ -410,15 +413,15 @@ stacked_data <- function(fp_list, indicator = "landuse", per_capita = FALSE,
 
 # circle planetary boundary plot --------------------
 
-circle_plot <- function(fp_table, diet, ylim.max = 4, ylim.min = 0, log = FALSE){
+circle_plot <- function(fp_table, diet, ylim.max = 4, ylim.min = 0, log = FALSE, legend = TRUE){
   
-  diet_index <- ifelse(diet %in% c("sq", "Staus Quo"),1, ifelse(diet %in% c("eat", "Planetary Health"),2,ifelse(diet %in% c("epo", "Ernährungspyramide"),3,NA)))
-  title = ifelse(diet %in% c("sq", "Staus Quo"),"Staus Quo", ifelse(diet %in% c("eat", "Planetary Health"),"Planetary Health Diet",ifelse(diet %in% c("epo", "Ernährungspyramide"),"Ernährungspyramide",NA)))
+  diet_index <- ifelse(diet %in% c("sq", "Status Quo"),1, ifelse(diet %in% c("eat", "Planetary Health"),2,ifelse(diet %in% c("epo", "Ernährungspyramide"),3,NA)))
+  title = ifelse(diet %in% c("sq", "Status Quo"),"Status Quo", ifelse(diet %in% c("eat", "Planetary Health"),"Planetary Health Diet",ifelse(diet %in% c("epo", "Ernährungspyramide"),"Ernährungspyramide",NA)))
 
   
-  fp_circle_scen <- data.frame(ind = as.character(names(fp_spider[-1])), 
-                             value = unlist(fp_spider[diet_index,][-1]),
-                             limit = ifelse(unlist(fp_spider[diet_index,][-1]) > ifelse(log, 0, 1), "yes", "no"))
+  fp_circle_scen <- data.frame(ind = as.character(names(fp_table[-1])), 
+                             value = unlist(fp_table[diet_index,][-1]),
+                             limit = ifelse(unlist(fp_table[diet_index,][-1]) > ifelse(log, 0, 1), "yes", "no"))
   
   
   plt <- ggplot(fp_circle_scen) +
@@ -436,7 +439,7 @@ circle_plot <- function(fp_table, diet, ylim.max = 4, ylim.min = 0, log = FALSE)
       ),
       color = "gray",
       position = "dodge2",
-      show.legend = TRUE,
+      show.legend = legend,
       alpha = .9
     ) +
     geom_hline(
@@ -482,15 +485,15 @@ circle_plot <- function(fp_table, diet, ylim.max = 4, ylim.min = 0, log = FALSE)
 }
 
 
-circle_plot_grad <- function(fp_table, diet, ylim.max = 4, ylim.min = 0, log = FALSE){
+circle_plot_grad <- function(fp_table, diet, ylim.max = 4, ylim.min = 0, log = FALSE, legend = TRUE){
   
-  diet_index <- ifelse(diet %in% c("sq", "Staus Quo"),1, ifelse(diet %in% c("eat", "Planetary Health"),2,ifelse(diet %in% c("epo", "Ernährungspyramide"),3,NA)))
-  title = ifelse(diet %in% c("sq", "Staus Quo"),"Staus Quo", ifelse(diet %in% c("eat", "Planetary Health"),"Planetary Health Diet",ifelse(diet %in% c("epo", "Ernährungspyramide"),"Ernährungspyramide",NA)))
+  diet_index <- ifelse(diet %in% c("sq", "Status Quo"),1, ifelse(diet %in% c("eat", "Planetary Health"),2,ifelse(diet %in% c("epo", "Ernährungspyramide"),3,NA)))
+  title = ifelse(diet %in% c("sq", "Status Quo"),"Status Quo", ifelse(diet %in% c("eat", "Planetary Health"),"Planetary Health Diet",ifelse(diet %in% c("epo", "Ernährungspyramide"),"Ernährungspyramide",NA)))
   
   
-  fp_circle_scen <- data.frame(ind = as.factor(names(fp_spider[-1])), 
-                               value = unlist(fp_spider[diet_index,][-1]),
-                               limit = ifelse(unlist(fp_spider[diet_index,])[-1] > ifelse(log, 0, 1), "yes", "no"))
+  fp_circle_scen <- data.frame(ind = as.factor(names(fp_table[-1])), 
+                               value = unlist(fp_table[diet_index,][-1]),
+                               limit = ifelse(unlist(fp_table[diet_index,])[-1] > ifelse(log, 0, 1), "yes", "no"))
   
   
   fp_circle_scen_exp <- fp_circle_scen %>%
@@ -516,7 +519,7 @@ circle_plot_grad <- function(fp_table, diet, ylim.max = 4, ylim.min = 0, log = F
    # geom_vline(
    #  #aes(xintercept = x), 
    #  xintercept = "Stickstoff",
-   #  #data.frame(x = as.factor(names(fp_spider[-1]))),
+   #  #data.frame(x = as.factor(names(fp_table[-1]))),
    #   color = "lightgrey",
    #   alpha = 0.9
    # ) + 
@@ -530,21 +533,19 @@ circle_plot_grad <- function(fp_table, diet, ylim.max = 4, ylim.min = 0, log = F
       #aes = 0.9,
       color = "transparent",
       position = "identity",
-      show.legend = TRUE,
+      show.legend = legend,
       alpha = 1,
       width = 0.95
     ) +
     geom_hline(
-      aes(yintercept = y), 
+      aes(yintercept = y, color = "Planetare Belastungsgrenze"), 
       data.frame(y = c(ifelse(log, 0,1))),
-      color = "darkgreen",
       size = 0.8,
       alpha = 0.8
     ) + 
     geom_hline(
-      aes(yintercept = y), 
+      aes(yintercept = y, color = "Obergrenze der Unsicherheitszone"), 
       data.frame(y = c(ifelse(log, log(2),2))),
-      color = "darkred",
       size = 0.8,
       alpha = 0.8
     ) +
@@ -555,14 +556,16 @@ circle_plot_grad <- function(fp_table, diet, ylim.max = 4, ylim.min = 0, log = F
                          limits = c(0, ylim.max),
                          name = "Wert relativ\nzum Grenzwert") + # "Value relative to\nplanetary boundary"
     #scale_fill_gradient2(low = "darkgreen", mid =  "yellow", high =  "firebrick", midpoint = 1.2, limits = c(0,4)) +
-    
+  
+    scale_color_manual(values = c("Planetare Belastungsgrenze" = "darkgreen", "Obergrenze der Unsicherheitszone" = "darkred")) + 
+  
     scale_y_continuous(
       limits = c(ylim.min, ylim.max),
       expand = c(0, 0),
       breaks = c(seq(0,1,1)) 
     ) +
     coord_polar(clip = "off")+
-    labs(title = title) + 
+    labs(title = title, color = NULL) + 
     #expand_limits(y = 10) + # or some other arbitrarily large number
     theme_minimal() +
     theme(
