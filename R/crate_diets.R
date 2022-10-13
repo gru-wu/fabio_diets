@@ -8,7 +8,7 @@ library(Matrix)
 # load data ---------------------------------------
 
 # select fabio version
-vers <- "1.2" # or "1.2"
+vers <- "1.1" # or "1.2"
 
 if (vers == "1.1"){
   eat_conc <- as.data.table(readxl::read_excel("inst/items_conc.xlsx", sheet = "concordance_1.1", na = "NA"))
@@ -33,9 +33,9 @@ if (vers == "1.1"){
   loss_shares <- as.data.table(readxl::read_excel("inst/items_conc.xlsx", sheet = "loss", na = "NA"))
   cbs <- readRDS("data/v1.2/cbs_tidy_food.rds")
   cbs_pop <- readRDS("data/v1.2/cbs_pop.rds")
-  Y <- readRDS("/mnt/nfs_fineprint/tmp/fabio/v1.2/losses/Y.rds")
-  io_codes <- read.csv("/mnt/nfs_fineprint/tmp/fabio/v1.2/io_codes.csv")
-  yr = 2019
+  Y <- readRDS("/mnt/nfs_fineprint/tmp/fabio/v1.2/losses/Y.rds") # "~/fabio/v1.2/losses/Y.rds" 
+  io_codes <- read.csv("/mnt/nfs_fineprint/tmp/fabio/v1.2/io_codes.csv") #  "~/fabio/v1.2/io_codes.csv"
+  yr = 2013
 }
 
 
@@ -105,8 +105,11 @@ Y_food_aut[is.na(fat_g),  fat_g  := fat_data]
 Y_food_aut[, `:=` (kcal_data = NULL, prot_data=NULL, fat_data = NULL)]
 Y_food_aut[,c("kcal_g", "prot_g", "fat_g")][is.na(Y_food_aut[,c("kcal_g", "prot_g", "fat_g")])] <-  0 #Y_food_aut <- Y_food_aut %>% mutate(across(kcal_g:fat_g,  ~replace(., !is.finite(.), 0)))
 
-# compute gross consumption in kcal per capita and day 
+# compute gross consumption in kcal/protein/fat per capita and day 
 Y_food_aut[, food_kcal_pc_day := food_g_pc_day*kcal_g]
+Y_food_aut[, food_prot_pc_day := food_g_pc_day*prot_g]
+Y_food_aut[, food_fat_pc_day := food_g_pc_day*fat_g]
+
 
 # merge with nutrition pyramid portion size data --> for nutrition pyramid diet
 Y_food_aut <- merge(Y_food_aut, epo_portions[,.(epo_subgroup, g_port = `g/portion`)], by = "epo_subgroup", all.x = TRUE, sort = FALSE)
@@ -124,7 +127,9 @@ Y_food_aut$loss[is.na(Y_food_aut$loss)] <- 0
 
 Y_food_aut[, `:=` (food_g_pc_day_net = food_g_pc_day * (1-waste_fin-loss), 
                    food_kcal_pc_day_net = food_kcal_pc_day * (1-waste_fin-loss),
-                   food_port_pc_day_net = food_port_pc_day * (1-waste_fin-loss))]
+                   food_port_pc_day_net = food_port_pc_day * (1-waste_fin-loss),
+                   food_prot_pc_day_net = food_prot_pc_day * (1-waste_fin-loss),
+                   food_fat_pc_day_net = food_fat_pc_day * (1-waste_fin-loss))]
 
 setkey(Y_food_aut, area_code, comm_code)
 
@@ -144,7 +149,10 @@ Y_food_aut <- merge(Y_food_aut, eat_diet, by = "eat_group_fin", all.x = TRUE, so
 # items not covered by EAT  (group "Other") are assumed to stay constant in their consumption (coffee, alcohol...)
 Y_food_aut[, eat_kcal_pc_day_net := ifelse(is.finite(eat_kcal_day), food_kcal_pc_day_net*eat_kcal_day/eat_group_sum, food_kcal_pc_day_net)]
 Y_food_aut[, eat_g_pc_day_net := eat_kcal_pc_day_net*(1/kcal_g)]
-Y_food_aut[, (c("eat_kcal_pc_day_net","eat_g_pc_day_net")) := replace(.SD, is.na(.SD), 0), .SDcols = c("eat_kcal_pc_day_net","eat_g_pc_day_net")]
+Y_food_aut[, eat_prot_pc_day_net := eat_g_pc_day_net*prot_g]
+Y_food_aut[, eat_fat_pc_day_net := eat_g_pc_day_net*fat_g]
+
+Y_food_aut[, (c("eat_kcal_pc_day_net","eat_g_pc_day_net","eat_prot_pc_day_net","eat_fat_pc_day_net")) := replace(.SD, is.na(.SD), 0), .SDcols = c("eat_kcal_pc_day_net","eat_g_pc_day_net","eat_prot_pc_day_net","eat_fat_pc_day_net")]
 
 # note that we work with kcal values directly, avoiding any conversions from dry weight to fresh weight
 # the eat diet is by definition normalized to 2500 kcal per day (excluding "Other" food items)
@@ -158,6 +166,9 @@ Y_food_aut <- merge(Y_food_aut, epo_diet[,.(epo_group, epo_port_day = `portions/
 Y_food_aut[, `:=`(epo_g_pc_day_net = ifelse(is.finite(epo_port_day), food_g_pc_day_net*epo_port_day/epo_group_port_sum, food_g_pc_day_net),
                   epo_kcal_pc_day_net = ifelse(is.finite(epo_port_day), food_kcal_pc_day_net*epo_port_day/epo_group_port_sum, food_kcal_pc_day_net))
            ]
+Y_food_aut[, epo_prot_pc_day_net := epo_g_pc_day_net*prot_g]
+Y_food_aut[, epo_fat_pc_day_net := epo_g_pc_day_net*fat_g]
+
 # NOTE: items without portion recommendation (alcohol, coffee & tea) are kept at their status quo level here as well!
 
 
@@ -171,6 +182,8 @@ Y_food_aut[, epo_t_pc := epo_g_pc * 1e-6]
 
 Y_food_aut <- relocate(Y_food_aut, c(eat_group_fin, epo_group, epo_subgroup, waste_group), .after = group)
 Y_food_aut <- relocate(Y_food_aut, c(area_code, area, comm_code, item_code, item, comm_group, group))
+
+
 
 # some consistency checks ------------------------------------------
 
@@ -203,5 +216,5 @@ cbs_food_tot <- cbs_food[, .(food_kcal_pc_day = sum(food_kcal_pc_day)), by = c("
 
 
 # save final demand table ----------------------------------------------
-Y_food_aut <- select(Y_food_aut, -c(kcal_g:prot_g, g_port,waste_fin, loss))
-saveRDS(Y_food_aut, file = ifelse(vers == "1.1", "data/v1.1/Y_food_aut_2013.rds", "data/v1.2/Y_food_aut_2019.rds"))
+#Y_food_aut <- select(Y_food_aut, -c(kcal_g:prot_g, g_port,waste_fin, loss))
+saveRDS(Y_food_aut, file = ifelse(vers == "1.1", paste0("data/v1.1/Y_food_aut_",yr,".rds"), paste0("data/v1.2/Y_food_aut_",yr,".rds")))

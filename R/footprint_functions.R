@@ -34,7 +34,7 @@ footprint <- function(country = "AUT", consumption = "food", allocation = "value
   }
 
   # calculate environmental intensities
-  E_int <- Ei[,c("landuse","biomass","blue","green","biodiv","n_application","p_application", "ghg", "luh")]
+  E_int <- Ei[,c("landuse","biomass","blue","green","biodiv","n_application","p_application", "ghg_all", "ghg", "luh", "ghg_pb")]
   E_int <- E_int/Xi
   E_int[!is.finite(E_int)] <- 0
   E_int <- cbind(Ei[,1:7], E_int)
@@ -76,8 +76,10 @@ footprint <- function(country = "AUT", consumption = "food", allocation = "value
                 biodiv   = production * E_int$biodiv[match_origin],
                 n_application   = production * E_int$n_application[match_origin],
                 p_application   = production * E_int$p_application[match_origin],
+                ghg_all = production * E_int$ghg_all[match_origin],
                 ghg     = production * E_int$ghg[match_origin],
-                luh     = production * E_int$luh[match_origin])]
+                luh     = production * E_int$luh[match_origin],
+                ghg_pb = production * E_int$ghg_pb[match_origin])]
 
   # add direct consumption of each item for reference (optional)
   #results[, direct_consumption := Y_target[match_origin]]
@@ -91,7 +93,7 @@ footprint <- function(country = "AUT", consumption = "food", allocation = "value
 
   # reorder columns
   results <- results %>%
-    relocate(c(production, landuse:luh), .after = continent_origin) %>%
+    relocate(c(production, landuse:ghg_pb), .after = continent_origin) %>%
     relocate(c(iso_origin, continent_origin), .after = country_origin) %>%
     relocate(group_origin, .after = item_origin) %>%
     relocate(group_target, .after = item_target)
@@ -146,7 +148,7 @@ add_per_capita <- function(fp){
 # fp = the footprint data.table
 # aggregate_by = a vector of columns to aggregate results by
 # indicators = indicators to keep (default is all of them)
-fp_aggregate <- function(fp, aggregate_by, indicators = c("landuse", "biomass", "green", "blue", "ghg", "luh", "biodiv", "n_application", "p_application")){
+fp_aggregate <- function(fp, aggregate_by, indicators = c("landuse", "biomass", "green", "blue", "ghg", "luh", "ghg_all", "ghg_pb", "biodiv", "n_application", "p_application")){
   indicators <- names(fp)[grep(paste(indicators, collapse = "|"), names(fp))]
   fp <- fp[, lapply(.SD, sum, na.rm=TRUE), by = aggregate_by, .SDcols = indicators]
 }
@@ -207,19 +209,23 @@ fp_map <- function(fp, map = world_map, indicator = "landuse", per_capita = FALS
                         "biodiv" = "Biodiversitätsverlust", "n_application" = "Stickstoffeinsatz", "p_application" = "Phosphoreinsatz")
   indicator_long <- indicators_long[indicator]
   units <- c("landuse" = "m<sup>2</sup>", "biomass" = "t", "blue" = "m<sup>3</sup>", "green" = "m<sup>3</sup>", "ghg" = "t CO<sub>2</sub>-Äq.", "luh" = "t CO<sub>2</sub>-Äq.", "ghg_all" = "t CO<sub>2</sub>-Äq.",
-             "biodiv" = "10^-6 Arten", "n_application" = "kg", "p_application" = "kg")
+             "biodiv" = "Arten pro MAJ", "n_application" = "kg", "p_application" = "kg")
   unit = units[indicator]
 
   if(per_capita) indicator <- paste0(indicator,"_pc")
 
   # plot
-  ggplot(data = world_fp) +
+  ggmap <- ggplot(data = world_fp) +
     geom_sf(aes(fill = .data[[indicator]]), size = 0.05) +
     labs(fill=paste(indicator_long, " <br> in", unit), title = title) +
     scale_fill_viridis_c(direction = -1, na.value = "lightgrey", ...) +
     coord_sf(crs = "+proj=robin") + # "+proj=moll"   "+proj=wintri"
     theme_map() +
     theme(plot.title = element_text(hjust = 0.5), plot.title.position = "plot", legend.title = element_markdown(size = 8)) #legend.position = "right"
+  
+  if(title == "") ggmap <- ggmap + theme(plot.title = element_blank())
+  
+  return(ggmap)
 
 }
 
@@ -358,15 +364,18 @@ stacked_bars <- function(fp_list, indicator = "landuse", per_capita = FALSE,
                          aggregate_by =  c("comm_group_ger"), bound = TRUE,
                          origin_items = "ALL", target_items = "ALL", origin_groups, target_groups, 
                          axis_lab = "",
-                         title = ""){
+                         title = "",
+                         reverse_legend = FALSE){
   
   # aggregate footprints by consumer item and combine to table with diets in columns
-  diet_labs = c("sq" = "Status \nQuo", "epo" = "Ernährungs-\npyramide", "eat" =  "Planetary \nHealth Diet")
+  diet_labs = c("sq" = "Status \nQuo", "epo" = "Ernährungs-\npyramide", "eat" =  "Planetary \nHealth Diet", "epo2" = "Ernährungs-\npyramide 2.0")
   fp_agg_long <- lapply(names(fp_list), function(fp){
     if (indicator == "landuse") fp_list[[fp]] <- fp_list[[fp]][group_origin != "Grazing",]
-    fp_aggregate(fp_list[[fp]], aggregate_by = "comm_group_ger", indicators = indicator) %>%
+    tab <- fp_aggregate(fp_list[[fp]], aggregate_by = "comm_group_ger", indicators = indicator) %>%
       #rename(!!sym(fp) := !!sym(indicator)) %>% 
-      mutate(diet = fp, diet_lab = factor(diet_labs[fp], levels = diet_labs))
+      mutate(diet = fp, diet_lab = factor(diet_labs[fp], levels = diet_labs[names(diet_labs) %in% names(fp_list)]))
+    if(indicator == "ghg") tab <- dplyr::select(tab, !ghg_all)
+    return(tab)
     }) %>% rbindlist
   #fp_ind <- fp_list_agg %>% purrr::reduce(inner_join, by = "comm_group_ger") %>% 
   
@@ -375,7 +384,7 @@ stacked_bars <- function(fp_list, indicator = "landuse", per_capita = FALSE,
   
   fp_plot <- ggplot(fp_agg_long, aes(x = diet_lab, y = !!sym(indicator), fill = factor(comm_group_ger, levels = rev(names(food_cols_vect_sel))))) +
       geom_bar(stat="identity", alpha = 0.85) +
-      scale_fill_manual(values = food_cols_vect_sel, name = "", guide = guide_legend()) +
+      scale_fill_manual(values = food_cols_vect_sel, name = "", guide = guide_legend(reverse = reverse_legend)) +
       labs(y = axis_lab, x = "") +
       theme_minimal() +
       theme(legend.position = "bottom", legend.direction="horizontal", legend.box = "horizontal",
@@ -383,9 +392,11 @@ stacked_bars <- function(fp_list, indicator = "landuse", per_capita = FALSE,
   
   if(bound) {
     fp_plot <- fp_plot + 
-      geom_hline(aes(yintercept = pbs[indicator, "lower"], color = "Planetare Belastungsgrenze"), size = 1.0)+
-      geom_hline(aes(yintercept = pbs[indicator, "upper"], color = "Obergrenze der Unsicherheitszone"), size = 1.0) +
-      scale_color_manual(values = c("Planetare Belastungsgrenze" = "darkgreen", "Obergrenze der Unsicherheitszone" = "red")) + 
+      geom_hline(aes(yintercept = pbs[ifelse(indicator %in% c("ghg", "luh", "ghg_pb"), "ghg_all", indicator), "boundary"], color = "Planetare Belastungsgrenze"), size = 0.4, linetype = "solid") +
+      geom_hline(aes(yintercept = pbs[ifelse(indicator %in% c("ghg", "luh", "ghg_pb"), "ghg_all", indicator), "upper"], color = "Obergrenze der Unsicherheitszone"), size = 1.0) +
+      geom_hline(aes(yintercept = pbs[ifelse(indicator %in% c("ghg", "luh", "ghg_pb"), "ghg_all", indicator), "lower"], color = "Untergrenze der Unsicherheitszone"), size = 1.0)+
+      scale_color_manual(values = c("Planetare Belastungsgrenze" = "black",  "Obergrenze der Unsicherheitszone" = "red", "Untergrenze der Unsicherheitszone" = "darkgreen")) + 
+      #scale_linetype_manual(values = c("Planetare Belastungsgrenze" = "solid",  "Obergrenze der Unsicherheitszone" = "solid", "Untergrenze der Unsicherheitszone" = "solid")) + 
       labs(color = NULL)+
       guides(color=guide_legend(direction='vertical'))
     }
@@ -401,14 +412,136 @@ stacked_data <- function(fp_list, indicator = "landuse", per_capita = FALSE,
   diet_labs = c("sq" = "Status \nQuo", "eat" =  "Planetary \nHealth", "epo" = "Ernährungs-\npyramide")
   fp_agg_long <- lapply(names(fp_list), function(fp){
     if (indicator == "landuse") fp_list[[fp]] <- fp_list[[fp]][group_origin != "Grazing",]
-    fp_aggregate(fp_list[[fp]], aggregate_by = "comm_group_ger", indicators = indicator) %>%
+    tab <- fp_aggregate(fp_list[[fp]], aggregate_by = "comm_group_ger", indicators = indicator) %>%
       #rename(!!sym(fp) := !!sym(indicator)) %>% 
       mutate(diet = fp, diet_lab = factor(diet_labs[fp], levels = diet_labs))
+    if(indicator == "ghg") tab <- dplyr::select(tab, !ghg_all)
+    return(tab)
   }) %>% rbindlist
   #fp_ind <- fp_list_agg %>% purrr::reduce(inner_join, by = "comm_group_ger") %>% 
   
 }
 
+
+# just the data
+stacked_data <- function(fp_list, indicator = "landuse", per_capita = FALSE,
+                         aggregate_by =  c("comm_group_ger")){
+  
+  # aggregate footprints by consumer item and combine to table with diets in columns
+  diet_labs = c("sq" = "Status \nQuo", "eat" =  "Planetary \nHealth", "epo" = "Ernährungs-\npyramide")
+  fp_agg_long <- lapply(names(fp_list), function(fp){
+    if (indicator == "landuse") fp_list[[fp]] <- fp_list[[fp]][group_origin != "Grazing",]
+    tab <- fp_aggregate(fp_list[[fp]], aggregate_by = "comm_group_ger", indicators = indicator) %>%
+      #rename(!!sym(fp) := !!sym(indicator)) %>% 
+      mutate(diet = fp, diet_lab = factor(diet_labs[fp], levels = diet_labs))
+    if(indicator == "ghg") tab <- dplyr::select(tab, !ghg_all)
+    return(tab)
+  }) %>% rbindlist
+  #fp_ind <- fp_list_agg %>% purrr::reduce(inner_join, by = "comm_group_ger") %>% 
+  
+}
+
+
+# version for single scenario with indicators side-by-side
+stacked_bars_single <- function(fp, ind_list = c("ghg", "luh"), ind_labs,
+                         aggregate_by =  c("comm_group_ger"), 
+                         origin_items = "ALL", target_items = "ALL", origin_groups, target_groups, 
+                         axis_lab = "",
+                         title = "",
+                         legend_pos = "right", legend_dir = "vertical", legend_box = "horizontal",
+                         reverse_legend = TRUE){
+  
+  if(missing(ind_labs)){
+    ind_labs = ind_list
+    names(ind_labs) <- ind_list
+  } 
+  
+  # aggregate footprints by consumer item and combine to table with diets in columns
+  #diet_labs = c("sq" = "Status \nQuo", "epo" = "Ernährungs-\npyramide", "eat" =  "Planetary \nHealth Diet", "epo2" = "Ernährungs-\npyramide 2.0")
+#  fp_agg_long <- lapply(names(fp_list), function(fp){
+#    if (indicator == "landuse") fp_list[[fp]] <- fp_list[[fp]][group_origin != "Grazing",]
+  fp_agg_long <- fp_aggregate(fp, aggregate_by = "comm_group_ger", indicators = ind_list) %>%
+      pivot_longer(cols = all_of(ind_list), names_to = "indicator", values_to = "value") %>%
+      #rename(!!sym(fp) := !!sym(indicator)) %>% 
+      mutate(indicator = factor(ind_labs[match(indicator, names(ind_labs))], levels = ind_labs))
+#    if(indicator == "ghg") tab <- dplyr::select(tab, !ghg_all)
+#    return(tab)
+#  }) %>% rbindlist
+  #fp_ind <- fp_list_agg %>% purrr::reduce(inner_join, by = "comm_group_ger") %>% 
+  
+  # plot
+  food_cols_vect_sel <- food_cols_vect[names(food_cols_vect) %in% unique(fp_agg_long$comm_group_ger)]
+  
+  fp_plot <- ggplot(fp_agg_long, aes(x = indicator, y = value, fill = factor(comm_group_ger, levels = rev(names(food_cols_vect_sel))))) +
+    geom_bar(stat="identity", alpha = 0.85) +
+    scale_fill_manual(values = food_cols_vect_sel, name = "", guide = guide_legend(reverse = reverse_legend)) +
+    labs(y = axis_lab, x = "") +
+    theme_minimal() +
+    theme(legend.position = legend_pos, legend.direction=legend_dir, legend.box = legend_box,
+          axis.title.y = element_markdown(face = "bold", size = 10))
+  
+
+  return(fp_plot)
+}
+
+
+# stack for emissions luh/ghg
+
+stacked_bars_ghg <- function(fp, ind_list = c("ghg", "luh"), ind_labs, mult_factor = 1, 
+                                aggregate_by =  c("comm_group_ger"), 
+                                origin_items = "ALL", target_items = "ALL", origin_groups, target_groups, 
+                                axis_lab = "",
+                                title = "",
+                                legend_pos = "bottom", legend_dir = "vertical", legend_box = "vertical",
+                                reverse_legend = TRUE){
+  
+  if(missing(ind_labs)){
+    ind_labs = ind_list
+    names(ind_labs) <- ind_list
+  } 
+  
+  # aggregate footprints by consumer item and combine to table with diets in columns
+  #diet_labs = c("sq" = "Status \nQuo", "epo" = "Ernährungs-\npyramide", "eat" =  "Planetary \nHealth Diet", "epo2" = "Ernährungs-\npyramide 2.0")
+  #  fp_agg_long <- lapply(names(fp_list), function(fp){
+  #    if (indicator == "landuse") fp_list[[fp]] <- fp_list[[fp]][group_origin != "Grazing",]
+  comm_group_ger_lab <- unique(items_ger$comm_group_ger)
+  names(comm_group_ger_lab) <- comm_group_ger_lab
+  comm_group_ger_lab["Zucker und Süßungsmittel"] <- "Zucker und Süßungs-mittel"
+  comm_group_ger_lab["Milchprodukte"] <- "Milch-produkte"
+  comm_group_ger_lab["Pflanzenöle"] <- "Pflanzen-öle"
+  comm_group_ger_lab["Fisch und Meeresfrüchte"] <- "Fisch und Meeres-früchte"
+  comm_group_ger_lab["Hülsenfrüchte"] <- "Hülsen-früchte"
+
+  
+  
+  fp_agg_long <- fp_aggregate(fp, aggregate_by = "comm_group_ger", indicators = c(ind_list)) %>% #, "ghg_all"
+    pivot_longer(cols = all_of(c(ind_list)), names_to = "indicator", values_to = "value") %>% #  "ghg_all"
+    #rename(!!sym(fp) := !!sym(indicator)) %>% 
+    mutate(indicator_name = factor(ind_labs[match(indicator, names(ind_labs))], levels = rev(ind_labs))) %>%
+    mutate(comm_group_ger = gsub(" ", "\n", comm_group_ger_lab[match(comm_group_ger, names(comm_group_ger_lab))])) %>%
+    mutate(comm_group_ger = gsub("-", "-\n", comm_group_ger)) %>%
+    mutate(value = value * mult_factor)
+  #    if(indicator == "ghg") tab <- dplyr::select(tab, !ghg_all)
+  #    return(tab)
+  #  }) %>% rbindlist
+  #fp_ind <- fp_list_agg %>% purrr::reduce(inner_join, by = "comm_group_ger") %>% 
+  
+  # plot
+  food_cols_vect_sel <- food_cols_vect[names(food_cols_vect) %in% unique(fp_agg_long$comm_group_ger)]
+  ghg_cols = c("purple", "seagreen")
+  names(ghg_cols) <- ind_labs
+  
+  fp_plot <- ggplot(fp_agg_long, aes(x = reorder(comm_group_ger, value, FUN = function(x){-sum(x)}), y = value, fill = indicator_name)) + # factor(comm_group_ger, levels = rev(names(food_cols_vect_sel)))
+    geom_bar(stat="identity", alpha = 0.85) +
+    scale_fill_manual(values = ghg_cols, name = "", guide = guide_legend(reverse = reverse_legend)) +
+    labs(y = axis_lab, x = "") +
+    theme_minimal() +
+    theme(legend.position = legend_pos, legend.direction=legend_dir, legend.box = legend_box,
+          axis.title.y = element_markdown(face = "bold", size = 10))
+  
+  
+  return(fp_plot)
+}
 
 
 # circle planetary boundary plot --------------------
@@ -487,7 +620,7 @@ circle_plot <- function(fp_table, diet, ylim.max = 4, ylim.min = 0, log = FALSE,
 
 circle_plot_grad <- function(fp_table, diet, ylim.max = 4, ylim.min = 0, log = FALSE, legend = TRUE){
   
-  diet_index <- ifelse(diet %in% c("sq", "Status Quo"),1, ifelse(diet %in% c("eat", "Planetary Health"),2,ifelse(diet %in% c("epo", "Ernährungspyramide"),3,NA)))
+  diet_index <- ifelse(diet %in% c("sq", "Status Quo"),1, ifelse(diet %in% c("eat", "Planetary Health"),3,ifelse(diet %in% c("epo", "Ernährungspyramide"),2,NA)))
   title = ifelse(diet %in% c("sq", "Status Quo"),"Status Quo", ifelse(diet %in% c("eat", "Planetary Health"),"Planetary Health Diet",ifelse(diet %in% c("epo", "Ernährungspyramide"),"Ernährungspyramide",NA)))
   
   
@@ -538,7 +671,7 @@ circle_plot_grad <- function(fp_table, diet, ylim.max = 4, ylim.min = 0, log = F
       width = 0.95
     ) +
     geom_hline(
-      aes(yintercept = y, color = "Planetare Belastungsgrenze"), 
+      aes(yintercept = y, color = "Untergrenze der Unsicherheitszone"), 
       data.frame(y = c(ifelse(log, 0,1))),
       size = 0.8,
       alpha = 0.8
@@ -557,7 +690,7 @@ circle_plot_grad <- function(fp_table, diet, ylim.max = 4, ylim.min = 0, log = F
                          name = "Wert relativ\nzum Grenzwert") + # "Value relative to\nplanetary boundary"
     #scale_fill_gradient2(low = "darkgreen", mid =  "yellow", high =  "firebrick", midpoint = 1.2, limits = c(0,4)) +
   
-    scale_color_manual(values = c("Planetare Belastungsgrenze" = "darkgreen", "Obergrenze der Unsicherheitszone" = "darkred")) + 
+    scale_color_manual(values = c("Untergrenze der Unsicherheitszone" = "darkgreen", "Obergrenze der Unsicherheitszone" = "darkred")) + 
   
     scale_y_continuous(
       limits = c(ylim.min, ylim.max),
