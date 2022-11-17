@@ -38,7 +38,7 @@ footprint <- function(country = "AUT", consumption = "food", allocation = "value
   }
 
   # calculate environmental intensities
-  E_int <- Ei[,c("landuse","biomass","blue","green","biodiv","n_application","p_application", "ghg_all", "ghg", "luh", "ghg_pb")]
+  E_int <- Ei[,c("landuse","biomass","blue","green","biodiv","n_application","p_application", "ghg_all", "ghg", "luh", "ghg_energy", "ghg_live", "ghg_other",  "ghg_pb")]
   E_int <- E_int/Xi
   E_int[!is.finite(E_int)] <- 0
   E_int <- cbind(Ei[,1:7], E_int)
@@ -92,6 +92,9 @@ footprint <- function(country = "AUT", consumption = "food", allocation = "value
                 ghg_all = production * E_int$ghg_all[match_origin],
                 ghg     = production * E_int$ghg[match_origin],
                 luh     = production * E_int$luh[match_origin],
+                ghg_energy = production * E_int$ghg_energy[match_origin],
+                ghg_live = production * E_int$ghg_live[match_origin],
+                ghg_other = production * E_int$ghg_other[match_origin],
                 ghg_pb = production * E_int$ghg_pb[match_origin])]
 
   # add direct consumption of each item for reference (optional)
@@ -161,7 +164,7 @@ add_per_capita <- function(fp){
 # fp = the footprint data.table
 # aggregate_by = a vector of columns to aggregate results by
 # indicators = indicators to keep (default is all of them)
-fp_aggregate <- function(fp, aggregate_by, indicators = c("landuse", "biomass", "green", "blue", "ghg", "luh", "ghg_all", "ghg_pb", "biodiv", "n_application", "p_application")){
+fp_aggregate <- function(fp, aggregate_by, indicators = c("landuse", "biomass", "green", "blue", "ghg", "luh", "ghg_energy",  "ghg_all", "ghg_pb", "biodiv", "n_application", "p_application")){
   indicators <- names(fp)[grep(paste(indicators, collapse = "|"), names(fp))]
   fp <- fp[, lapply(.SD, sum, na.rm=TRUE), by = aggregate_by, .SDcols = indicators]
 }
@@ -172,7 +175,7 @@ is.finite.data.frame <- function(x) do.call(cbind, lapply(x, is.finite))
 
 
 #----------------------------------------------------------------------------#
-# ---------     Functions to visualize results         --------
+# ----    Functions to visualize results         --------
 #----------------------------------------------------------------------------#
 
 
@@ -577,7 +580,7 @@ stacked_bars_single <- function(fp, ind_list = c("ghg", "luh"), ind_labs,
 
 # stack for emissions luh/ghg
 
-stacked_bars_ghg <- function(fp, ind_list = c("ghg", "luh"), ind_labs, mult_factor = 1, 
+stacked_bars_ghg <- function(fp, ind_list = c("ghg_pb", "ghg_energy", "luh"), mult_factor = 1, 
                                 aggregate_by =  c("comm_group_plot"), 
                                 origin_items = "ALL", target_items = "ALL", origin_groups, target_groups, 
                                 axis_lab = "",
@@ -585,10 +588,24 @@ stacked_bars_ghg <- function(fp, ind_list = c("ghg", "luh"), ind_labs, mult_fact
                                 legend_pos = "bottom", legend_dir = "vertical", legend_box = "vertical",
                                 reverse_legend = TRUE){
   
-  if(missing(ind_labs)){
-    ind_labs = ind_list
-    names(ind_labs) <- ind_list
-  } 
+  if(lang == "de") ind_labs <- c("ghg_pb" = "Landwirtschaft", 
+                                 "ghg_energy" = "Energie", 
+                                 "ghg_live" = "Tierhaltung",
+                                 "luh" = "Landnutzungsänderung",
+                                  "ghg_other" = "andere")
+  if(lang == "en") ind_labs <- c("ghg_pb" = "Agriculture", 
+                                 "ghg_energy" = "Energy",  
+                                 "ghg_live" = "Animal husbandry",
+                                 "luh" = "Land use change",
+                                 "ghg_other" = "others")
+  
+  
+  ind_labs <- ind_labs[ind_list]
+  
+  #if(missing(ind_labs)){
+  #  ind_labs = ind_list
+  #  names(ind_labs) <- ind_list
+  #} 
   
   # aggregate footprints by consumer item and combine to table with diets in columns
   #diet_labs = c("sq" = "Status \nQuo", "epo" = "Ernährungs-\npyramide", "eat" =  "Planetary \nHealth Diet", "epo2" = "Ernährungs-\npyramide 2.0")
@@ -620,7 +637,7 @@ stacked_bars_ghg <- function(fp, ind_list = c("ghg", "luh"), ind_labs, mult_fact
   
   # plot
   food_cols_vect_sel <- food_cols_vect[names(food_cols_vect) %in% unique(fp_agg_long$comm_group_plot)]
-  ghg_cols = c("purple", "seagreen")
+  ghg_cols = viridis::viridis(length(ind_list))#c("purple", "seagreen")
   names(ghg_cols) <- ind_labs
   
   fp_plot <- ggplot(fp_agg_long, aes(x = reorder(comm_group_plot, value, FUN = function(x){-sum(x)}), y = value, fill = indicator_name)) + # factor(comm_group_plot, levels = rev(names(food_cols_vect_sel)))
@@ -772,13 +789,25 @@ circle_plot <- function(fp_table, diet, ylim.max = 4, ylim.min = 0, log = FALSE,
 circle_plot_grad <- function(fp_table, diet, ylim.max = 4, ylim.min = 0, log = FALSE, legend = TRUE, lang = "de"){
   
   if (lang == "de"){
-    diet_index <- ifelse(diet %in% c("sq", "Status Quo"),1, ifelse(diet %in% c("eat", "Planetary Health"),3,ifelse(diet %in% c("epo", "Ernährungspyramide"),2,NA)))
-    title = ifelse(diet %in% c("sq", "Status Quo"),"Status Quo", ifelse(diet %in% c("eat", "Planetary Health"),"Planetary Health Diet",ifelse(diet %in% c("epo", "Ernährungspyramide"),"Ernährungspyramide",NA)))
+    diet_index <- ifelse(diet %in% c("sq", "Status Quo"),1, 
+                         ifelse(diet %in% c("eat", "Planetary Health"),3,
+                                ifelse(diet %in% c("epo", "Ernährungspyramide"),2,
+                                       ifelse(diet %in% c("epo2", "Ernährungspyramide 2.0"),4,NA))))
+    title = ifelse(diet %in% c("sq", "Status Quo"),"Status Quo", 
+                   ifelse(diet %in% c("eat", "Planetary Health"),"Planetary Health Diet",
+                          ifelse(diet %in% c("epo", "Ernährungspyramide"),"Ernährungspyramide",
+                                 ifelse(diet %in% c("epo2", "Ernährungspyramide 2.0"),"Ernährungspyramide 2.0", NA))))
     line_cols <- c( "darkgreen", "darkred")
     names(line_cols) <- c("Untergrenze der Unsicherheitszone", "Obergrenze der Unsicherheitszone")
   } else if (lang == "en"){
-    diet_index <- ifelse(diet %in% c("sq", "Status Quo"),1, ifelse(diet %in% c("eat", "Planetary Health"),3,ifelse(diet %in% c("epo", "Nutrition Pyramid"),2,NA)))
-    title = ifelse(diet %in% c("sq", "Status Quo"),"Status Quo", ifelse(diet %in% c("eat", "Planetary Health"),"Planetary Health Diet",ifelse(diet %in% c("epo", "Nutrition Pyramid"),"Nutrition Pyramid",NA)))
+    diet_index <- ifelse(diet %in% c("sq", "Status Quo"),1, 
+                         ifelse(diet %in% c("eat", "Planetary Health"),3,
+                                ifelse(diet %in% c("epo", "Nutrition Pyramid"),2,
+                                       ifelse(diet %in% c("epo2", "Nutrition Pyramid 2.0"),4,NA))))
+    title = ifelse(diet %in% c("sq", "Status Quo"),"Status Quo", 
+                   ifelse(diet %in% c("eat", "Planetary Health"),"Planetary Health Diet",
+                          ifelse(diet %in% c("epo", "Nutrition Pyramid"),"Nutrition Pyramid",
+                                 ifelse(diet %in% c("epo2", "Nutrition Pyramid 2.0"),"Nutrition Pyramid 2.0", NA))))
     line_cols <- c( "darkgreen", "darkred")
     names(line_cols) <- c("Lower limit of zone of unceartainty", "Upper limit of zone of unceartainty")
   }
@@ -1178,4 +1207,145 @@ spiderweb <- function(plot.data,
 }
 
 #fp_spider$group
+
+
+
+
+#----------------------------------------------------------------------------#
+# ---- Auxiliary functions for definitions of diets  --------
+#----------------------------------------------------------------------------#
+
+
+
+dietshift_cond <- function(Y_food_dt = Y_food_aut, cond.var = "landuse", cond.reg = "AUT", diet.name, diet.suffix = "cond", 
+                           rescale.var, rescale.group, fp_sq = fp_sq, x = X[,"2013"], skip.groups = NULL,
+                           add.newcols = FALSE){
+  
+  if(missing(cond.var)) stop("cond.var has to be specified")
+  if(missing(cond.reg)) stop("cond.reg has to be specified")
+  if(missing(diet.name)) stop("diet.name has to be specified")
+  if(missing(diet.suffix)) stop("diet.suffix has to be specified")
+  if(missing(rescale.var)) stop("rescale.var has to be specified")
+  if(missing(rescale.group)) stop("rescale.group has to be specified (e.g. 'epo_subgroup'")
+  
+  
+  # prepare data --------
+  
+  dt <- copy(Y_food_dt)
+  
+  rescaler_bygroup <- dt[,.(rescaler = unique(get(rescale.var))), by = c(rescale.group)]
+  if(max(table(rescaler_bygroup[[rescale.group]])) > 1) stop("(some) rescaler groups have no unique scaling factor")
+  
+  
+  # for increasing groups, is at least one item produced in home country?
+  x <- cbind(dt[,c("area_code", "area", "area_iso", "item_code", "item", "comm_code", rescale.group, "food_t"), with = FALSE], x)
+  x_reg <-  x[area_iso ==  cond.reg,]
+  x_reg_pos <- x_reg[x > 0,]
+  x_group <- x[, .(x = sum(x)), by = c(rescale.group, "area_iso")]
+  x_group_reg <- x_group[area_iso ==  cond.reg,]
+  cat("Increasing groups are ", paste(x_group_reg[get(rescale.group) %in% rescaler_bygroup[(!get(rescale.group) %in% skip.groups) & rescaler>1][[rescale.group]]][[rescale.group]], collapse = ", "), "\n")
+  if(min(x_group_reg[get(rescale.group) %in% rescaler_bygroup[(!get(rescale.group) %in% skip.groups) & rescaler>1,][[rescale.group]]]$x) == 0) stop("Group(s) ", x_group_reg[get(rescale.group) %in% rescaler_bygroup[(!get(rescale.group) %in% skip.groups) & rescaler>1][[rescale.group]] & x == 0,][[rescale.group]],  " should be increased but are are produced in the target country. Adapt skip.groups or change function further if needed.")
+  
+  # calculate total consumption-based indicator-intensity of each product produced and consumed in target country
+  fp_sq_reg <- fp_sq[country_origin == cond.reg & country_target == cond.reg & item_target %in% x_reg_pos$item,]
+  fp_sq_reg <- fp_aggregate(fp_sq_reg, aggregate_by = c("item_target"))
+  fp_sq_reg <- merge(fp_sq_reg, dt[area_iso == cond.reg, .(item, consumption_t_pc = food_t_pc)], by.x = "item_target", by.y = "item", all.x = TRUE, sort = FALSE)
+  fp_sq_reg[, (paste0(cond.var,"_intensity_per_t")) := get(cond.var)/consumption_t_pc]
+  
+  
+  # adapt rescaling factors to satisfy increased demand by domestic items  -----
+  
+  # get sum of domestic, foreign and total products in consumption per group
+  dt[,`:=` (dom_group_sum = sum(food_t_pc_net[area_iso == cond.reg]),
+            for_group_sum = sum(food_t_pc_net[area_iso != cond.reg]),
+            group_sum = sum(food_t_pc_net)
+  ), by = c(rescale.group)]
+  
+  all.equal(dt$group_sum, dt$dom_group_sum + dt$for_group_sum)
+  
+  # adapt rescaler:
+  
+  # for items of groups that should increase (and are not among skip.groups), adapt rescaler so that increased demand is filled by domestic products
+  dt[get(rescale.var)>1 & area_iso == cond.reg & (!get(rescale.group) %in% skip.groups), (paste0(rescale.var, "_",diet.suffix)) := (get(rescale.var)*group_sum - for_group_sum)/dom_group_sum]
+  # and keep foreign products at their status quo level
+  dt[get(rescale.var)>1 & area_iso != cond.reg & (!get(rescale.group) %in% skip.groups), (paste0(rescale.var, "_",diet.suffix)) := 1]
+  # items that should decrease or stay the same vis-a-vis status quo, or those among skip.groups keep their original rescaler
+  dt[get(rescale.var)<=1 | (get(rescale.group) %in% skip.groups), (paste0(rescale.var, "_",diet.suffix)) := get(rescale.var)]
+  
+  # get new consumption according to updated rescaler
+  dt[, (paste0(diet.name,"_t_pc")) := food_t_pc * get(rescale.var)]
+  dt[, (paste0(diet.name,"_",diet.suffix,"_t_pc")) := food_t_pc * get(paste0(rescale.var, "_",diet.suffix))]
+  # and check if the group-wise rescalers are still the same (as defined by the original diet change)
+  rescalers_by_group <- dt[, .(#new_t_pc = sum(epo2_t_pc),
+    rescaler = sum(get(paste0(diet.name,"_t_pc")))/sum(food_t_pc),
+    #new_t_pc_cond = sum(epo2_t_pc_cond),
+    rescaler_cond = sum(get(paste0(diet.name,"_",diet.suffix,"_t_pc")))/sum(food_t_pc)),
+    by = c(rescale.group)]
+  
+  if(all.equal(rescalers_by_group$rescaler, rescalers_by_group$rescaler_cond, tolerance = 1e-3) != TRUE) stop("Group-wise rescaling factors are not the same at mean relative tolerance of 1e-3. Check for correct rescale.group and function correctness")
+  
+  
+  # check if increased demand for domestic goods keeps conditional indicator (.e.g landuse) within the target region within status quo level -------
+  
+  dt_reg <- merge(dt[area_iso == cond.reg,], fp_sq_reg[,c("item_target", paste0(cond.var,"_intensity_per_t")), with = FALSE], by.x = "item", by.y = "item_target", all.x = TRUE, sort = FALSE)
+  setnafill(dt_reg, fill = 0, cols = paste0(cond.var,"_intensity_per_t"))
+  
+  if( (remaining_reserve <- sum(dt_reg$food_t_pc*dt_reg$landuse_intensity_per_t) - sum(dt_reg[[paste0(diet.name,"_",diet.suffix,"_t_pc")]]*dt_reg$landuse_intensity_per_t)) > 0){
+    cat("Additional demand for increasing items can be fulfilled domestically from ", cond.var, " reserve with ", remaining_reserve, " m2 per person remaining free.")
+  } else {
+    
+    cat("Additional demand for increasing items cannot be fulfilled exclusively domestically from ", cond.var, " reserve (excess requirement: ", -remaining_reserve, " m2 per person). The remainding demand is fulfilled with imported goods relative to their import shares.")
+    
+    # if demand cannot be fulfilled domestically, adapt rescaler to fill only up until limit
+    reducer <- sum(dt_reg$food_t_pc*dt_reg$landuse_intensity_per_t)/sum(dt_reg[[paste0(diet.name,"_",diet.suffix,"_t_pc")]]*dt_reg$landuse_intensity_per_t)
+    dt[get(rescale.var)>1 & area_iso == cond.reg, (paste0(rescale.var, "_",diet.suffix)) := get(paste0(rescale.var, "_",diet.suffix))*reducer]
+    # and fill excess demand with imported products, proportionally to their import shares within each group
+    dt[,`:=` (dom_group_sum_new_cond = sum(food_t_pc_net[area_iso == cond.reg]*get(paste0(rescale.var, "_",diet.suffix))[area_iso == cond.reg])), by = c(rescale.group)]
+    dt[get(rescale.var)>1 & area_iso != cond.reg & group_sum > 0, (paste0(rescale.var, "_",diet.suffix)) := (get(rescale.var)*group_sum - dom_group_sum_new_cond)/for_group_sum]
+    
+    # check again if group-wise original target rescaling factors are maintained
+    dt[, (paste0(diet.name,"_",diet.suffix,"_t_pc")) := food_t_pc * get(paste0(rescale.var, "_",diet.suffix))]
+    
+    rescalers_by_group <- dt[, .(#new_t_pc = sum(epo2_t_pc),
+      rescaler = sum(get(paste0(diet.name,"_t_pc")))/sum(food_t_pc),
+      rescaler_cond = sum(get(paste0(diet.name,"_",diet.suffix,"_t_pc")))/sum(food_t_pc)),
+      by = c(rescale.group)]
+    
+    if(all.equal(rescalers_by_group$rescaler, rescalers_by_group$rescaler_cond, tolerance = 1e-3) != TRUE) stop("Group-wise rescaling factors are not the same at mean relative tolerance of 1e-3. Check for correct rescale.group and function correctness")
+    
+  }
+  
+  
+  # save result -----
+  
+  # return initial food consumption table with new column of adapted re-scaling parameters and all required net consumption/nutrient intake values
+
+  Y_food_dt <- merge(Y_food_dt, dt[,c("area_code", "item_code", "area", "comm_code", "item", paste0(rescale.var, "_",diet.suffix)), with = FALSE], by = c("area_code", "item_code", "area", "comm_code", "item"), all.x = TRUE, sort = FALSE)  #cbind(Y_food_dt, paste0(rescale.var, "_",diet.suffix) = dt$epo2_rescaler_sq_cond)
+  
+  if(add.newcols){
+    rescale_cols <- c("g_pc_day_net", "kcal_pc_day_net", "prot_pc_day_net", "fat_pc_day_net", "port_pc_day_net", "g_pc_day", "g_pc", "t_pc")
+    Y_food_dt[, (paste0(diet.name,"_",diet.suffix,"_",rescale_cols)) := lapply(.SD, function(x){x*get(paste0(rescale.var, "_",diet.suffix))}),
+              .SDcols = paste0("food_",rescale_cols)]
+  }
+  
+  return(Y_food_dt)
+  
+}
+
+
+# check domestic vs imported shares per product 
+get_sources <- function(Y_food_dt, reg = "AUT", diet, var, group, area.var = "area_iso"){
+
+  if(diet == "sq") diet <- "food"
+  
+    Y_food_dt <- Y_food_dt[,`:=` (dom_group_sum = sum(get(paste0(diet,"_",var))[get(area.var) == reg]),
+                                  for_group_sum = sum(get(paste0(diet,"_",var))[get(area.var) != cond.reg]),
+                                  group_sum = sum(get(paste0(diet,"_",var)))
+                          ), by = c(rescale.group)]
+    
+    Y_food_dt[, `:=` (dom_group_share = dom_group_sum/group_sum)]
+  
+}
+
+
 
