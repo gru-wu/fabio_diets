@@ -60,6 +60,9 @@ if (vers == "1.1"){
 E_ghg_agg <- lapply(E_ghg, colSums)
 E_luh2_agg <- lapply(E_luh, function(x){colSums(x[grep("5 years", items_luh$Element),])})
 E_ghg_pb <- lapply(E_ghg, function(x){colSums(x[!grepl("Energy use", items_ghg$Element),])})
+E_ghg_energy <- lapply(E_ghg, function(x){colSums(x[grepl("Energy use", items_ghg$Element),])})
+E_ghg_live <- lapply(E_ghg, function(x){colSums(x[grepl("Manure|Enteric", items_ghg$Element),])})
+E_ghg_other <- lapply(E_ghg, function(x){colSums(x[!grepl("Energy use|Manure|Enteric", items_ghg$Element),])})
 
 # convert potential species loss to E/MSY
 #if (vers == "1.2"){
@@ -79,12 +82,14 @@ E_biodiv <- lapply(E_biodiv, function(x){
 #    cbind(e, "ghg" = e_ghg*1000, "luh" = e_luh*1000)
 #    }, E, E_ghg_agg, E_luh2_agg)
 #  } else if(vers == 1.2){
-E_all <- Map(function(e, e_biodiv, e_ghg, e_luh, e_ghg_pb){
-  cbind(e, "biodiv" = e_biodiv[,"cropland"]+e_biodiv[,"pasture"], "ghg" = e_ghg*1000, "luh" = e_luh*1000, "ghg_pb" = e_ghg_pb*1000, "ghg_all" = e_ghg*1000+e_luh*100)
+E_all <- Map(function(e, e_biodiv, e_ghg, e_luh, e_energy, e_live, e_other, e_ghg_pb){
+  cbind(e, "biodiv" = e_biodiv[,"cropland"]+e_biodiv[,"pasture"], 
+        "ghg" = e_ghg*1000, "luh" = e_luh*1000, "ghg_energy" = e_energy*1000, "ghg_live" = e_live*1000, "ghg_other" = e_other*1000, "ghg_pb" = e_ghg_pb*1000, "ghg_all" = e_ghg*1000+e_luh*1000)
   #cbind(e, "biodiv" = 0, "ghg" = e_ghg*1000, "luh" = e_luh*1000, "ghg_pb" = e_ghg_pb*1000, "ghg_all" = e_ghg*1000+e_luh*1000)
   
-}, E, E_biodiv, E_ghg_agg, E_luh2_agg, E_ghg_pb)
+}, E, E_biodiv, E_ghg_agg, E_luh2_agg, E_ghg_energy, E_ghg_live, E_ghg_other, E_ghg_pb)
 #}
+rm(E, E_biodiv, E_ghg_agg, E_luh2_agg, E_ghg_energy, E_ghg_pb, E_ghg, E_luh)
 
 # read region classification
 regions <- fread(file=paste0("/mnt/nfs_fineprint/tmp/fabio/v",vers,"/regions.csv"))
@@ -111,6 +116,7 @@ if (lang == "de") {
   items_group[, comm_group_plot := comm_group_en]
 }
 Y_food_aut <- merge(Y_food_aut, items_group[,.(item_code,comm_group_plot)], by = c("item_code"), all.x = TRUE, sort = FALSE)
+#Y_food_aut <- merge(Y_food_aut, unique(fabio_index[,.(area_code,area_iso = iso3c)]), by = c("area_code"), all.x = TRUE, sort = FALSE)
 setkey(Y_food_aut, area_code, comm_code)
 
 # colors for food groups
@@ -192,12 +198,16 @@ fp_sq <- merge(fp_sq, items_group[,.(item, comm_group_plot)], by.x = c("item_tar
 fp_eat <- merge(fp_eat, items_group[,.(item, comm_group_plot)], by.x = c("item_target"), by.y = c("item"), all.x = TRUE, sort = FALSE)
 fp_epo <- merge(fp_epo, items_group[,.(item, comm_group_plot)], by.x = c("item_target"), by.y = c("item"), all.x = TRUE, sort = FALSE)
 
+all.equal(fp_sq$ghg_all, fp_sq$ghg_energy + fp_sq$ghg_live + fp_sq$ghg_other + fp_sq$luh)
+all.equal(fp_sq$ghg, fp_sq$ghg_energy + fp_sq$ghg_live + fp_sq$ghg_other)
+all.equal(fp_sq$ghg_pb, fp_sq$ghg_live + fp_sq$ghg_other)
+
 # save results
-# if (write){ 
-#   saveRDS(fp_sq, paste0("./plots/v",vers,"/fp_sq_",yr,".rds"))
+if (write){ 
+#   saveRDS(fp_sq, paste0("./data/v",vers,"/fp_sq_",yr,".rds"))
 #   saveRDS(fp_eat, paste0("./plots/v",vers,"/fp_eat_",yr,".rds"))
 #   saveRDS(fp_epo, paste0("./plots/v",vers,"/fp_epo_",yr,".rds"))
-# }
+ }
 
 # aggregate as desired (see function library)
 fp_sq_agg <- fp_aggregate(fp_sq, aggregate_by = c("country_consumer"), indicators = c("landuse", "blue", "ghg", "luh", "ghg_pb", "ghg_all", "biomass", "biodiv", "n_application", "p_application"))
@@ -450,33 +460,33 @@ fp_map_data <- lapply(list("map_sq" = fp_sq, "map_epo" = fp_epo,  "map_eat" = fp
 ### Biodiversity --------------------------------
 (mosaic_biodiv_sq <- fp_mosaic(fp = fp_sq, indicator = "biodiv", aggregate_by = c("comm_group_plot", "continent_origin"),
                                divide_by_cells = 1e-10, divide_by_axis = 1e-10, 
-                               display_min = 1, round_digs = 2,
+                               display_min = 0.5, round_digs = 2,
                                tick_offset = c(0,-0.0033,-0.006,-0.006,-0.004,-0.004,-0.002,-0.001, -0.001)))
 
 (mosaic_biodiv_eat <- fp_mosaic(fp = fp_eat, indicator = "biodiv", aggregate_by = c("comm_group_plot", "continent_origin"),
                                 divide_by_cells = 1e-10, divide_by_axis = 1e-10, 
-                                display_min = 10, round_digs = 2,
+                                display_min = 0.5, round_digs = 2,
                                 tick_offset = c(0,-0.0033,-0.006,-0.006,-0.004,-0.004,-0.002,-0.001,-0.001)))
 
 (mosaic_biodiv_epo <- fp_mosaic(fp = fp_epo, indicator = "biodiv", aggregate_by = c("comm_group_plot", "continent_origin"),
                                 divide_by_cells = 1e-10, divide_by_axis = 1e-10, 
-                                display_min = 10, round_digs = 2,
+                                display_min = 0.5, round_digs = 2,
                                 tick_offset = c(0,-0.0033,-0.006,-0.006,-0.004,-0.004,-0.002,-0.001, -0.001)))
 
 ### N Application --------------------------------
 (mosaic_n_sq <- fp_mosaic(fp = fp_sq, indicator = "n_application", aggregate_by = c("comm_group_plot", "continent_origin"),
                           divide_by_cells = 1e-3, divide_by_axis = 1e-3, 
-                          display_min = 10, round_digs = 0,
+                          display_min = 50, round_digs = 0,
                           tick_offset = c(0,-0.0033,-0.006,-0.006,-0.004,-0.004,-0.002,-0.001,-0.001)))
 
 (mosaic_n_eat <- fp_mosaic(fp = fp_eat, indicator = "n_application", aggregate_by = c("comm_group_plot", "continent_origin"),
                            divide_by_cells = 1e-3, divide_by_axis = 1e-3, 
-                           display_min = 10, round_digs = 0,
+                           display_min = 50, round_digs = 0,
                            tick_offset = c(0,-0.0033,-0.006,-0.006,-0.004,-0.004,-0.002,-0.001,-0.001)))
 
 (mosaic_n_epo <- fp_mosaic(fp = fp_epo, indicator = "n_application", aggregate_by = c("comm_group_plot", "continent_origin"),
                            divide_by_cells = 1e-3, divide_by_axis = 1e-3, 
-                           display_min = 10, round_digs = 0,
+                           display_min = 50, round_digs = 0,
                            tick_offset = c(0,-0.0033,-0.006,-0.006,-0.004,-0.004,-0.002,-0.001,-0.001)))
 
 ### P Application --------------------------------
@@ -682,8 +692,14 @@ ggsave(filename=paste0(plot_dir,"/v",vers,"/stack/pb_stack_ghg_sq.png"), pb_stac
 
 
 ## comparison of direct vs LUC emissions by group
-stack_ghg_luc_sq <- stacked_bars_ghg(fp = fp_sq, mult_fact = 8495000/1000000, axis_lab =  "THG-Emissionen in Mio. t CO<sub>2</sub>-Äq.", ind_labs = ind_labs) + theme(legend.position=c(.85,.85))
-ggsave(filename=paste0(plot_dir,"/v",vers,"/stack/stack_ghg_luc_sq.png"), stack_ghg_luc_sq, width = 25, height = 12, units = "cm") 
+#fp_sq[, ghg_energy_1 := ghg_all - ghg_pb - luh]
+#all.equal(fp_sq$ghg_energy, fp_sq$ghg_energy_1)
+
+stack_ghg_luc_sq <- stacked_bars_ghg(fp = fp_sq, ind_list = c("ghg_live", "ghg_energy", "luh", "ghg_other"),
+                                     mult_fact = 8495000/1000000, 
+                                     axis_lab =  "THG-Emissionen in Mio. t CO<sub>2</sub>-Äq.") + 
+  theme(legend.position=c(.85,.85))
+ggsave(filename=paste0(plot_dir,"/v",vers,"/stack/stack_ghg_detail_sq.png"), stack_ghg_luc_sq, width = 25, height = 12, units = "cm") 
 
 
 
@@ -830,22 +846,30 @@ all.equal(sum(fp_eat_item$kcal_net_consumed)/365, sum(Y_food_aut$eat_kcal_pc_day
 
 # compute footprint by kcal
 inds <-  c("production", "landuse", "blue", "ghg", "luh", "ghg_pb", "ghg_all", "biomass", "biodiv", "n_application", "p_application")
-fp_sq_item_by <- fp_sq_item[, (paste0(inds,"_per_kcal")) := lapply(.SD, '/', kcal_net_consumed), .SDcols = inds]
-fp_sq_item_by <- fp_sq_item[, (paste0(inds,"_per_gprot")) := lapply(.SD, '/', proteins_net_consumed), .SDcols = inds]
+fp_sq_item[, (paste0(inds,"_per_kcal")) := lapply(.SD, '/', (kcal_net_consumed)), .SDcols = inds]
+fp_sq_item[, (paste0(inds,"_per_gprot")) := lapply(.SD, '/', (proteins_net_consumed)), .SDcols = inds]
+fp_sq_item[, (paste0(inds,"_per_g")) := lapply(.SD, '/', (t_net_consumed*1e6)), .SDcols = inds]
+
 #fp_epo_item_by <- fp_epo_item[, (paste0(inds,"_per_kcal")) := lapply(.SD, '/', kcal_net_consumed), .SDcols = inds]
 #fp_eat_item_by <- fp_eat_item[, (paste0(inds,"_per_g_protein")) := lapply(.SD, '/', kcal_net_consumed), .SDcols = inds]
 
 ## same on aggregate item level
-fp_sq_item_agg <- fp_aggregate(fp_sq_item, aggregate_by = c("country_consumer", "item_target", "comm_group_plot"), indicators = c(inds, "t_consumed", "t_net_consumed", "kcal_net_consumed"))
-fp_sq_item_agg_by <- fp_sq_item_agg[,(paste0(inds,"_per_kcal")) := lapply(.SD, '/', kcal_net_consumed), .SDcols = inds]
-fp_sq_item_agg_by <- fp_sq_item_agg_by[,(paste0(inds,"_per_g_protein")) := lapply(.SD, '/', proteins_net_consumed), .SDcols = inds]
-write.csv(fp_sq_item_agg_by, "tables/fp_sq_item_agg_by.csv", fileEncoding="UTF-16LE")
+fp_sq_item_agg <- fp_aggregate(fp_sq_item, aggregate_by = c("country_consumer", "item_target", "comm_group_plot"), indicators = c(inds, "t_consumed", "t_net_consumed", "kcal_net_consumed", "proteins_net_consumed"))
+fp_sq_item_agg <- fp_sq_item_agg[, -grep("_per_", names(fp_sq_item_agg)), , with = FALSE]
+fp_sq_item_agg[,(paste0(inds,"_per_kcal")) := lapply(.SD, '/', (kcal_net_consumed)), .SDcols = inds]
+fp_sq_item_agg[,(paste0(inds,"_per_g_protein")) := lapply(.SD, '/', (proteins_net_consumed)), .SDcols = inds]
+fp_sq_item_agg[,(paste0(inds,"_per_g")) := lapply(.SD, '/', (t_net_consumed*1e6)), .SDcols = inds]
 
-## and on group level
-fp_sq_group_agg <- fp_aggregate(fp_sq_item, aggregate_by = c("country_consumer", "comm_group_plot"), indicators = c(inds, "t_consumed", "t_net_consumed", "kcal_net_consumed"))
-fp_sq_group_agg_by <- fp_sq_group_agg[,(paste0(inds,"_per_kcal")) := lapply(.SD, '/', kcal_net_consumed), .SDcols = inds]
-fp_sq_group_agg_by <- fp_sq_group_agg_by[,(paste0(inds,"_per_g_protein")) := lapply(.SD, '/', proteins_net_consumed), .SDcols = inds]
-write.csv(fp_sq_group_agg_by, "tables/fp_sq_group_agg_by.csv", fileEncoding="UTF-16LE")
+if (write) write.csv(fp_sq_item_agg, paste0(plot_dir,"/v",vers,"/tables/fp_sq_item_agg.csv"), fileEncoding="UTF-16LE")
+
+# and on group level
+fp_sq_group_agg <- fp_aggregate(fp_sq_item, aggregate_by = c("country_consumer", "comm_group_plot"), indicators = c(inds, "t_consumed", "t_net_consumed", "kcal_net_consumed", "proteins_net_consumed"))
+fp_sq_group_agg <- fp_sq_group_agg[, -grep("_per_", names(fp_sq_group_agg)), , with = FALSE]
+fp_sq_group_agg[,(paste0(inds,"_per_kcal")) := lapply(.SD, '/', kcal_net_consumed), .SDcols = inds]
+fp_sq_group_agg[,(paste0(inds,"_per_g_protein")) := lapply(.SD, '/', proteins_net_consumed), .SDcols = inds]
+fp_sq_group_agg[,(paste0(inds,"_per_g")) := lapply(.SD, '/', (t_net_consumed*1e6)), .SDcols = inds]
+
+if (write) write.csv(fp_sq_item_agg, paste0(plot_dir,"/v",vers,"/tables/fp_sq_group_agg_by.csv"), fileEncoding="UTF-16LE")
 
 
 
@@ -854,57 +878,77 @@ write.csv(fp_sq_group_agg_by, "tables/fp_sq_group_agg_by.csv", fileEncoding="UTF
 epo_groups_all <- unique(Y_food_aut$epo_group)
 epo_groups_keep <- c("All sugars", "Fruits", "Coffee, tea and cocoa", "Spices", "Alcohol", NA)
 
-Y_food_aut[epo_group %in% epo_groups_keep , `:=`(epo2_kcal_pc_day_net = epo_kcal_pc_day_net, epo2_prot_pc_day_net = epo_prot_pc_day_net, 
-                                                 epo2_g_pc_day_net = epo_g_pc_day_net, epo2_fat_pc_day_net = epo_fat_pc_day_net)]
+epo_group_ports <- Y_food_aut[, .(epo_port_pc_day_net = sum(epo_port_pc_day_net)), by = epo_group]
+epo_subgroup_ports <- Y_food_aut[, .(epo_port_pc_day_net = sum(epo_port_pc_day_net)), by = .(epo_group,epo_subgroup)]
+units <- c("kcal", "prot", "fat", "g", "port")
 
+# define rescale factors compared to the baseline EPO
+Y_food_aut[epo_group %in% epo_groups_keep , epo2_rescaler := 1]
+Y_food_aut[epo_group %in% c("Meat, red",  "Meat, low-fat", "Fish", "Butter, lard or tallow", "Eggs"), epo2_rescaler := 1/2]
+Y_food_aut[epo_group %in% c("Cereals, roots and tubers"), epo2_rescaler := 5/4]
+Y_food_aut[epo_group %in% c("Milk and products") , epo2_rescaler := 1/3]
+Y_food_aut[epo_subgroup %in% c("Vegetables"), epo2_rescaler := 2/epo_subgroup_ports[epo_subgroup == "Vegetables"]$epo_port_pc_day_net]
+Y_food_aut[epo_subgroup %in% c("Legumes"), epo2_rescaler := 1/epo_subgroup_ports[epo_subgroup == "Legumes"]$epo_port_pc_day_net]
+Y_food_aut[epo_subgroup %in% c("Vegetable oils, nuts and seeds"), epo2_rescaler := 2]
 
-Y_food_aut[epo_group %in% c("Meat, red",  "Meat, low-fat", "Fish", "Butter, lard or tallow", "Eggs") , `:=`(epo2_kcal_pc_day_net = epo_kcal_pc_day_net/2, epo2_prot_pc_day_net = epo_prot_pc_day_net/2, epo2_g_pc_day_net = epo_g_pc_day_net/2, epo2_fat_pc_day_net = epo_fat_pc_day_net/2)]
-Y_food_aut[epo_group %in% c("Cereals, roots and tubers") , `:=`(epo2_kcal_pc_day_net = epo_kcal_pc_day_net*5/4, epo2_prot_pc_day_net = epo_prot_pc_day_net*5/4, epo2_g_pc_day_net = epo_g_pc_day_net*5/4, epo2_fat_pc_day_net = epo_fat_pc_day_net*5/4)]
-Y_food_aut[epo_group %in% c("Milk and products") , `:=`(epo2_kcal_pc_day_net = epo_kcal_pc_day_net*1/3, epo2_prot_pc_day_net = epo_prot_pc_day_net*1/3, epo2_g_pc_day_net = epo_g_pc_day_net*1/3, epo2_fat_pc_day_net = epo_fat_pc_day_net*1/3)]
+# adapt individual rescaling factors so that excess demand compared to status quo is satisfyied (primarliy) with domestic products,
+# while ensuring that land use in Austria does not increase overall compared to sq
 
-Y_food_aut[epo_subgroup %in% c("Vegetables") , `:=`(epo2_kcal_pc_day_net = epo_kcal_pc_day_net*2/2.7231774, epo2_prot_pc_day_net = epo_prot_pc_day_net*2/2.7231774, epo2_g_pc_day_net = epo_g_pc_day_net*2/2.7231774, epo2_fat_pc_day_net = epo_fat_pc_day_net*2/2.7231774)]
-Y_food_aut[epo_subgroup %in% c("Legumes") , `:=`(epo2_kcal_pc_day_net = epo_kcal_pc_day_net*1/0.2629964, epo2_prot_pc_day_net = epo_prot_pc_day_net*1/0.2629964, epo2_g_pc_day_net = epo_g_pc_day_net*1/0.2629964, epo2_fat_pc_day_net = epo_fat_pc_day_net*1/0.2629964)]
-#Y_food_aut[comm_group_plot %in% "Pflanzenöle" , `:=`(epo2_kcal_pc_day_net = epo_kcal_pc_day_net*2, epo2_prot_pc_day_net = epo_prot_pc_day_net*2, epo2_g_pc_day_net = epo_g_pc_day_net*2, epo2_fat_pc_day_net = epo_fat_pc_day_net*2)]
-#Y_food_aut[epo_subgroup == c("Vegetable oils, nuts and seeds") &  comm_group_plot != "Pflanzenöle", `:=`(epo2_kcal_pc_day_net = food_kcal_pc_day_net, epo2_prot_pc_day_net = food_prot_pc_day_net, epo2_g_pc_day_net = food_g_pc_day_net, epo2_fat_pc_day_net = food_fat_pc_day_net)]
-Y_food_aut[epo_subgroup == c("Vegetable oils, nuts and seeds") , `:=`(epo2_kcal_pc_day_net = epo_kcal_pc_day_net*2, epo2_prot_pc_day_net = epo_prot_pc_day_net*2, epo2_g_pc_day_net = epo_g_pc_day_net*2, epo2_fat_pc_day_net = epo_fat_pc_day_net*2)]
+Y_food_aut[, epo2_rescaler_sq := epo_rescaler*epo2_rescaler]
 
+#Y_food_aut <- dietshift_cond(Y_food_aut, cond.var = "landuse", cond.reg = "AUT", diet.name = "epo2", 
+#                             rescale.var = "epo2_rescaler_sq", rescale.group = "epo_subgroup", 
+#                             fp_sq = fp_sq, x = X[,"2013"],
+#                             add.newcols = TRUE)
+#
+
+#Y_food_aut[,(paste0("epo2_",units, "_pc_day_net")) := lapply(.SD, function(x) x*epo2_rescaler_sq_cond), .SDcols = paste0("food_",units, "_pc_day_net")]
+
+rescale_cols <- c("g_pc_day_net", "kcal_pc_day_net", "prot_pc_day_net", "fat_pc_day_net", "port_pc_day_net", "g_pc_day", "g_pc", "t_pc")
+Y_food_aut[, (paste0("epo2_",rescale_cols)) := lapply(.SD, function(x){x*epo2_rescaler_sq}),
+          .SDcols = paste0("food_",rescale_cols)]
 
 # transform into annual totals
-Y_food_aut[, `:=`(epo2_g_pc = epo2_g_pc_day_net * (1/(1-waste_fin-loss)) * 365,
-                  epo2_t_pc = epo2_g_pc_day_net * (1/(1-waste_fin-loss)) * 365 * 1e-6,
-                  epo2_port_day = epo2_g_pc_day_net/g_port)]
+#Y_food_aut[, `:=`(epo2_g_pc = epo2_g_pc_day_net * (1/(1-waste_fin)) * (1/(1-loss)) * 365,
+#                  epo2_t_pc = epo2_g_pc_day_net * (1/(1-waste_fin)) * (1/(1-loss)) * 365 * 1e-6,
+#                  epo2_port_day = epo2_g_pc_day_net/g_port)]
 
 
 # check nutritional values
 sum(Y_food_aut$epo2_kcal_pc_day_net)
-sum(Y_food_aut[comm_group_plot %in% c("Getreide","Wurzeln und Knollen")]$epo2_kcal_pc_day_net)
+#sum(Y_food_aut[comm_group_plot %in% c("Getreide","Wurzeln und Knollen")]$epo2_kcal_pc_day_net)
 sum(Y_food_aut$epo2_prot_pc_day_net)# - sum(Y_food_aut$epo_prot_pc_day_net)
-sum(Y_food_aut[comm_group_plot %in% c("Eier")]$epo2_prot_pc_day_net) 
+#sum(Y_food_aut[comm_group_plot %in% c("Eier")]$epo2_prot_pc_day_net) 
 sum(Y_food_aut$epo2_g_pc_day_net)
 
 sum(Y_food_aut$epo_kcal_pc_day_net)
-sum(Y_food_aut[comm_group_plot %in% c("Getreide","Wurzeln und Knollen")]$epo_kcal_pc_day_net)
+#sum(Y_food_aut[comm_group_plot %in% c("Getreide","Wurzeln und Knollen")]$epo_kcal_pc_day_net)
 sum(Y_food_aut$epo_prot_pc_day_net)
 sum(Y_food_aut$epo_g_pc_day_net)
 
 # calculate portions per epo group
-Y_food_aut_epo2 <- Y_food_aut[, .(epo_port_day = sum(epo_g_pc_day_net/g_port, na.rm = TRUE), epo2_port_day = sum(epo2_g_pc_day_net/ g_port, na.rm = TRUE)), by = epo_group]
-Y_food_aut_epo2_sub <- Y_food_aut[, .(epo_port_day = sum(epo_g_pc_day_net/g_port, na.rm = TRUE), epo2_port_day = sum(epo2_g_pc_day_net/ g_port, na.rm = TRUE)), by = .(epo_subgroup, epo_group)]
-Y_food_aut_epo2_sub <- Y_food_aut_epo2_sub[, `:=`(epo_port_day_group = sum(epo_port_day), epo2_port_day_group = sum(epo2_port_day)), by = epo_group]
-Y_food_aut_epo2_item <- Y_food_aut[, .(epo_port_day = sum(epo_g_pc_day_net/g_port, na.rm = TRUE), epo2_port_day = sum(epo2_g_pc_day_net/ g_port, na.rm = TRUE)), by = c("epo_subgroup", "epo_group", "item", "g_port")]
-write.csv(Y_food_aut_epo2_sub, "Y_food_aut_epo2_sub.csv")
-write.csv(Y_food_aut_epo2_item, "Y_food_aut_epo2_item.csv")
+#Y_food_aut_epo2 <- Y_food_aut[, .(epo_port_day = sum(epo_g_pc_day_net/g_port, na.rm = TRUE), epo2_port_day = sum(epo2_g_pc_day_net/ g_port, na.rm = TRUE)), by = epo_group]
+Y_food_aut_epo_sub <- Y_food_aut[, .(epo_port_day = sum(epo_g_pc_day_net/g_port, na.rm = TRUE), epo2_port_day = sum(epo2_g_pc_day_net/ g_port, na.rm = TRUE)), by = .(epo_subgroup, epo_group)]
+Y_food_aut_epo_sub <- Y_food_aut_epo_sub[, `:=`(epo_port_day_group = sum(epo_port_day), epo2_port_day_group = sum(epo2_port_day)), by = epo_group]
+Y_food_aut_epo_item <- Y_food_aut[, .(epo_port_day = sum(epo_g_pc_day_net/g_port, na.rm = TRUE), epo2_port_day = sum(epo2_g_pc_day_net/ g_port, na.rm = TRUE)), by = c("epo_subgroup", "epo_group", "item", "g_port")]
+if (write) write.csv(Y_food_aut_epo_sub, paste0(plot_dir,"/v",vers,"/tables/Y_food_aut_epo_sub.csv"))
+if (write) write.csv(Y_food_aut_epo_item, paste0(plot_dir,"/v",vers,"/tables/Y_food_aut_epo_item.csv"))
 
-fp_epo2 <- footprint(country = "AUT",  allocation = "value", year = yr, y = Y_food_aut$epo2_t_pc, X = X, E = E_all, index = fabio_index, v = vers, take.result = take_prod_result, result.dir = "data", result.suffix = "epo2")
+
+### calculate footprint of EPO 2.0 --------
+
+fp_epo2 <- footprint(country = "AUT",  allocation = "value", year = yr, y = Y_food_aut$epo2_t_pc, X = X, E = E_all, index = fabio_index, v = vers, take.result = FALSE, result.dir = "data", result.suffix = "epo2")
 fp_epo2$landuse[fp_epo2$item_origin=="Grazing"] <- 0
 fp_epo2$landuse <- fp_epo2$landuse * 10000
 fp_epo2 <- merge(fp_epo2, items_group[,.(item, comm_group_plot)], by.x = c("item_target"), by.y = c("item"), all.x = TRUE, sort = FALSE)
 
+fp_epo2_agg <- fp_aggregate(fp_epo2, aggregate_by = c("country_consumer"), indicators = c("landuse", "blue", "ghg", "luh", "ghg_pb", "ghg_all", "biomass", "biodiv", "n_application", "p_application"))
 
-### plots for EPO 2.0 ----------------
 
-## stack plots 
+### create plots for EPO 2.0 ----------------
 
+#### stack plots ----
+indicators <- c("landuse", "blue", "ghg_all", "biodiv", "n_application", "p_application")
 pb_stack_list2 <- sapply(indicators, function(ind){
   stacked_bars(fp_list = list("sq" = fp_sq,  "epo" = fp_epo, "eat" = fp_eat, "epo2" = fp_epo2), 
                indicator = ind, axis_lab = indicator_labs[ind], bound = TRUE)
@@ -942,7 +986,7 @@ if(write){
 }
 
 
-## diet plots 
+#### diet plots -------
 
 Y_agg2 <- Y_food_aut[, lapply(.SD, sum, na.rm=TRUE), by = comm_group_plot, .SDcols = c("food_g_pc_day_net",    "eat_g_pc_day_net",    "epo_g_pc_day_net",    "epo2_g_pc_day_net",
                                                                                       "food_kcal_pc_day_net", "eat_kcal_pc_day_net", "epo_kcal_pc_day_net", "epo2_kcal_pc_day_net",
@@ -956,12 +1000,12 @@ Y_agg2_long <- Y_agg2 %>%
 
 food_cols_vect_sel <- food_cols_vect[names(food_cols_vect) %in% unique(Y_agg2_long$comm_group_plot)]
 
-Y_agg2_long <- Y_agg2_long %>% filter(diet %in% c("epo", "epo2"))
+#Y_agg2_long <- Y_agg2_long %>% filter(diet %in% c("epo", "epo2"))
 
 
 # plot
 (diet_plot2_g <- ggplot(Y_agg2_long, 
-                        aes(x = factor(diet_lab, levels = rev(c("Ernährungspyramide", "Ernährungspyramide 2.0"))), 
+                        aes(x = factor(diet_lab, levels = rev(c("Status Quo", "Planetary Health Diet", "Ernährungspyramide", "Ernährungspyramide 2.0"))), 
                             y = g, fill = factor(comm_group_plot, levels = rev(names(food_cols_vect_sel))))) +
     geom_bar(stat="identity", alpha = 0.85) +
     scale_fill_manual(values = food_cols_vect_sel, name = "", guide = guide_legend()) +
@@ -972,7 +1016,7 @@ Y_agg2_long <- Y_agg2_long %>% filter(diet %in% c("epo", "epo2"))
           axis.text.y = element_text(face = "bold", size = 10)))
 
 (diet_plot2_kcal <- ggplot(Y_agg2_long, 
-                           aes(x = factor(diet_lab, levels = rev(c("Ernährungspyramide", "Ernährungspyramide 2.0"))), 
+                           aes(x = factor(diet_lab, levels = rev(c("Status Quo", "Planetary Health Diet", "Ernährungspyramide", "Ernährungspyramide 2.0"))), 
                                y = kcal, fill = factor(comm_group_plot, levels = rev(names(food_cols_vect_sel))))) +
     geom_bar(stat="identity", alpha = 0.85) +
     scale_fill_manual(values = food_cols_vect_sel, name = "", guide = guide_legend()) +
@@ -983,7 +1027,7 @@ Y_agg2_long <- Y_agg2_long %>% filter(diet %in% c("epo", "epo2"))
           axis.text.y = element_text(face = "bold", size = 10)))
 
 (diet_plot2_prot <- ggplot(Y_agg2_long, 
-                           aes(x = factor(diet_lab, levels = rev(c("Ernährungspyramide", "Ernährungspyramide 2.0"))), 
+                           aes(x = factor(diet_lab, levels = rev(c("Status Quo", "Planetary Health Diet", "Ernährungspyramide", "Ernährungspyramide 2.0"))), 
                                y = prot, fill = factor(comm_group_plot, levels = rev(names(food_cols_vect_sel))))) +
     geom_bar(stat="identity", alpha = 0.85) +
     scale_fill_manual(values = food_cols_vect_sel, name = "", guide = guide_legend()) +
@@ -994,7 +1038,7 @@ Y_agg2_long <- Y_agg2_long %>% filter(diet %in% c("epo", "epo2"))
           axis.text.y = element_text(face = "bold", size = 10)))
 
 (diet_plot2_fat <- ggplot(Y_agg2_long, 
-                          aes(x = factor(diet_lab, levels = rev(c("Ernährungspyramide", "Ernährungspyramide 2.0"))), 
+                          aes(x = factor(diet_lab, levels = rev(c("Status Quo", "Planetary Health Diet", "Ernährungspyramide", "Ernährungspyramide 2.0"))), 
                               y = fat, fill = factor(comm_group_plot, levels = rev(names(food_cols_vect_sel))))) +
     geom_bar(stat="identity", alpha = 0.85) +
     scale_fill_manual(values = food_cols_vect_sel, name = "", guide = guide_legend()) +
@@ -1014,6 +1058,37 @@ if (write) {
 }
 
 
+#### circle plot --------
+
+fp_agg <- as.data.frame(rbind(fp_sq_agg, fp_epo_agg, fp_eat_agg, fp_epo2_agg))
+fp_agg$diet <- factor(c("Status \nQuo", "Ernährungs- \npyramide", "Planetary \nHealth Diet", "Ernährungs- \npyramide \n2.0"), 
+                      levels = c("Status \nQuo", "Ernährungs- \npyramide", "Planetary \nHealth Diet","Ernährungs- \npyramide \n2.0"))
+fp_agg_sel <- fp_agg %>% rename(group = diet) %>%
+  select(c(group, landuse, blue, ghg_all, biodiv, n_application, p_application)) %>%
+  rename(Flächenverbrauch = landuse, Wasserverbrauch = blue, Emissionen = ghg_all, Biodiversität = biodiv, Stickstoff = n_application, Phosphor = p_application)
+
+fp_circle <- fp_agg_sel
+fp_circle[,2:7] <- t((t(fp_agg_sel[,2:7])-pbs[, "lower"])/pbs[, "range"])+1
+
+pb_circle2 <- sapply(c("sq", "epo", "eat", "epo2"), circle_plot_grad, fp_table = fp_circle, ylim.min = -0.0, ylim.max = 4, log = FALSE, legend = FALSE,
+                    simplify = FALSE, USE.NAMES = TRUE)
+(pb_circle2 <- wrap_plots(pb_circle2, guides = "collect", nrow = 1) & theme(legend.position = 'bottom',
+                                                                          legend.direction = 'horizontal'))
+
+if (write) ggsave(paste0(plot_dir,"/v",vers,"/epo/pb_circle.png"), pb_circle2, width = 40, units = "cm", scale = 1)
+
+
+#### maps ----
+fp_maps_epo2 <- sapply(indicators, function(x){fp_map(fp = fp_epo2[fp_epo2$country_origin != "AUT"], 
+                                                      map = world_map, indicator = x, 
+                                                      limits = c(0, fp_limits[[x]]),
+                                                      title = "",
+                                                      lang = lang)}, USE.NAMES = TRUE, simplify = FALSE)
+
+  (fp_map_landuse_epo2 <- fp_map(fp = fp_epo2[fp_epo2$country_origin != "AUT"], map = world_map, indicator = "landuse",
+                              origin_items = "ALL", target_items = "ALL", limits = c(0, fp_limits$landuse),
+                              title = "", lang = lang)) #Pro-Kopf Flächenfußabruck der österreichischen Ernährungspyramide
+
 
 ## save data ---------------
 plot_data <- c(fp_map_data, fp_mosaic_data, 
@@ -1027,4 +1102,7 @@ plot_data <- c(fp_map_data, fp_mosaic_data,
                #"fp_by_item_eat" = list(fp_eat_item_agg)
                )
 
-write.xlsx(plot_data, file = paste0(plot_dir,"/v",vers,"/plot_data.xlsx"), overwrite = TRUE)
+if (write){
+  write.xlsx(plot_data, file = paste0(plot_dir,"/v",vers,"/plot_data.xlsx"), overwrite = TRUE)
+  saveRDS(Y_food_aut, paste0("./data/v",vers,"/Y_food_aut_full_",yr,".rds"))
+} 
