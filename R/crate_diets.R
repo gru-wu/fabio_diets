@@ -97,13 +97,14 @@ Y_food_aut[, food_g_pc_day := food_g_pc/365]
 Y_food_aut <- merge(Y_food_aut, eat_conc[,.(item_code, eat_group_fin, epo_group, epo_subgroup)], by = "item_code", all.x = TRUE, sort = FALSE)
 Y_food_aut <- merge(Y_food_aut, cbs_food_aut[,.(item_code, kcal_g, prot_g, fat_g)], by = "item_code", all.x = TRUE, sort = FALSE)
 
-# add fao global caloric content data for items no longer in FBS (Sugar Refined, Meat meal, molasses..)
+# add fao global caloric content data for items no longer in FBS (Sugar Refined, Meat meal, Molasses..)
 Y_food_aut <- merge(Y_food_aut, fao_comp[,.(item_code,kcal_data, prot_data, fat_data)], by = "item_code", all.x = TRUE, sort = FALSE)
 Y_food_aut[is.na(kcal_g), kcal_g := kcal_data]
 Y_food_aut[is.na(prot_g), prot_g := prot_data]
 Y_food_aut[is.na(fat_g),  fat_g  := fat_data]
 Y_food_aut[, `:=` (kcal_data = NULL, prot_data=NULL, fat_data = NULL)]
-Y_food_aut[,c("kcal_g", "prot_g", "fat_g")][is.na(Y_food_aut[,c("kcal_g", "prot_g", "fat_g")])] <-  0 #Y_food_aut <- Y_food_aut %>% mutate(across(kcal_g:fat_g,  ~replace(., !is.finite(.), 0)))
+#Y_food_aut[,c("kcal_g", "prot_g", "fat_g")][is.na(Y_food_aut[,c("kcal_g", "prot_g", "fat_g")])] <-  0 #Y_food_aut <- Y_food_aut %>% mutate(across(kcal_g:fat_g,  ~replace(., !is.finite(.), 0)))
+Y_food_aut <- setnafill(Y_food_aut, fill = 0, cols = c("kcal_g", "prot_g", "fat_g"))
 
 # compute gross consumption in kcal/protein/fat per capita and day 
 Y_food_aut[, food_kcal_pc_day := food_g_pc_day*kcal_g]
@@ -118,25 +119,29 @@ Y_food_aut <- merge(Y_food_aut, epo_portions[,.(epo_subgroup, g_port = `g/portio
 Y_food_aut[, food_port_pc_day := food_g_pc_day/g_port]
 
 # compute daily per capita consumption net of waste and losses
-waste_shares[, waste_fin := distribution_fin + final_consumption_fin]
+waste_shares[, waste_fin := distribution_fin + final_consumption_fin - distribution_fin*final_consumption_fin] # last term to take sequential loss into account (= 1 - (1-distribution_fin)*(1-final_consumption_fin))
 Y_food_aut <- merge(Y_food_aut, eat_conc[,.(item_code, waste_group)], by = c("item_code"), all.x = TRUE, sort = FALSE)
 Y_food_aut <- merge(Y_food_aut, as.data.table(waste_shares)[,.(waste_group, waste_fin)], by = c("waste_group"), all.x = TRUE, sort = FALSE)
-Y_food_aut$waste_fin[is.na(Y_food_aut$waste_fin)] <- 0
+#Y_food_aut$waste_fin[is.na(Y_food_aut$waste_fin)] <- 0
 Y_food_aut <- merge(Y_food_aut, loss_shares[,.(item_code, loss)], by = c("item_code"), all.x = TRUE, sort = FALSE)
-Y_food_aut$loss[is.na(Y_food_aut$loss)] <- 0
+#Y_food_aut$loss[is.na(Y_food_aut$loss)] <- 0
+Y_food_aut <- setnafill(Y_food_aut, fill = 0, cols = c("waste_fin", "loss"))
 
-Y_food_aut[, `:=` (food_g_pc_day_net = food_g_pc_day * (1-waste_fin-loss), 
-                   food_kcal_pc_day_net = food_kcal_pc_day * (1-waste_fin-loss),
-                   food_port_pc_day_net = food_port_pc_day * (1-waste_fin-loss),
-                   food_prot_pc_day_net = food_prot_pc_day * (1-waste_fin-loss),
-                   food_fat_pc_day_net = food_fat_pc_day * (1-waste_fin-loss))]
+# NOTE: consumption in kcal/protein/fat is already net of losses (inedible parts). Thus only waste shares need to be subtracted here.
+# consumption in grams is including losses, thus also needs to deduct loss shares. 
+
+Y_food_aut[, `:=` (food_g_pc_day_net = food_g_pc_day * (1-waste_fin) * (1-loss),  # (1-waste_fin-loss) # NOTE: distribution & final comnsumption auch sequenziell!
+                   food_kcal_pc_day_net = food_kcal_pc_day * (1-waste_fin),
+                   food_port_pc_day_net = food_port_pc_day * (1-waste_fin) *(1-loss), # portions are calcualted from grams, thus also need to deduct losses
+                   food_prot_pc_day_net = food_prot_pc_day * (1-waste_fin),
+                   food_fat_pc_day_net = food_fat_pc_day * (1-waste_fin))]
 
 setkey(Y_food_aut, area_code, comm_code)
 
 
 ## compute consumption of comparison diets ------------------------------------------
 
-# EAT: calculate consumption sums by EAT group (net kcal consumption)
+### EAT: calculate consumption sums by EAT group (net kcal consumption) -------
 Y_food_aut[, eat_group_sum := sum(food_kcal_pc_day_net), by = eat_group_fin]
 # Y_food_aut[, eat_group_share := ifelse(is.finite(food_kcal_pc_day_net/eat_group_sum), food_kcal_pc_day_net/eat_group_sum, 0)]
 
@@ -147,34 +152,50 @@ Y_food_aut <- merge(Y_food_aut, eat_diet, by = "eat_group_fin", all.x = TRUE, so
 
 # calculate net EAT consumption pc and day (using kcal because eat gram values are in dry matter for some items)
 # items not covered by EAT  (group "Other") are assumed to stay constant in their consumption (coffee, alcohol...)
-Y_food_aut[, eat_kcal_pc_day_net := ifelse(is.finite(eat_kcal_day), food_kcal_pc_day_net*eat_kcal_day/eat_group_sum, food_kcal_pc_day_net)]
-Y_food_aut[, eat_g_pc_day_net := eat_kcal_pc_day_net*(1/kcal_g)]
-Y_food_aut[, eat_prot_pc_day_net := eat_g_pc_day_net*prot_g]
-Y_food_aut[, eat_fat_pc_day_net := eat_g_pc_day_net*fat_g]
+Y_food_aut[, eat_rescaler := ifelse(is.finite(eat_kcal_day), (eat_kcal_day/eat_group_sum), 1)]
+#Y_food_aut[, eat_kcal_pc_day_net := ifelse(is.finite(eat_kcal_day), food_kcal_pc_day_net*(eat_kcal_day/eat_group_sum), food_kcal_pc_day_net)]
+Y_food_aut[, eat_kcal_pc_day_net := food_kcal_pc_day_net*eat_rescaler]
+#Y_food_aut[, eat_g_pc_day_net := eat_kcal_pc_day_net*(1/kcal_g)*(1-loss)]
+Y_food_aut[, eat_g_pc_day_net := food_g_pc_day_net*eat_rescaler]
+#Y_food_aut[, eat_prot_pc_day_net := eat_g_pc_day_net*prot_g*(1/(1-loss))]
+Y_food_aut[, eat_prot_pc_day_net := food_prot_pc_day_net*eat_rescaler]
+#Y_food_aut[, eat_fat_pc_day_net := eat_g_pc_day_net*fat_g*(1/(1-loss))]
+Y_food_aut[, eat_fat_pc_day_net := food_fat_pc_day_net*eat_rescaler]
+Y_food_aut[, eat_port_pc_day_net := food_port_pc_day_net*eat_rescaler]
 
-Y_food_aut[, (c("eat_kcal_pc_day_net","eat_g_pc_day_net","eat_prot_pc_day_net","eat_fat_pc_day_net")) := replace(.SD, is.na(.SD), 0), .SDcols = c("eat_kcal_pc_day_net","eat_g_pc_day_net","eat_prot_pc_day_net","eat_fat_pc_day_net")]
+#Y_food_aut[, (c("eat_kcal_pc_day_net","eat_g_pc_day_net","eat_prot_pc_day_net","eat_fat_pc_day_net")) := replace(.SD, is.na(.SD), 0), .SDcols = c("eat_kcal_pc_day_net","eat_g_pc_day_net","eat_prot_pc_day_net","eat_fat_pc_day_net")]
+Y_food_aut <- setnafill(Y_food_aut, fill = 0, cols = c("eat_kcal_pc_day_net", "eat_g_pc_day_net", "eat_prot_pc_day_net", "eat_fat_pc_day_net"))
 
 # note that we work with kcal values directly, avoiding any conversions from dry weight to fresh weight
 # the eat diet is by definition normalized to 2500 kcal per day (excluding "Other" food items)
 
 
-# Nutrition pyramid: compute portions per pyramid group and day
+### Nutrition pyramid: compute portions per pyramid group and day ---------
 Y_food_aut[, epo_group_port_sum := sum(food_port_pc_day_net), by = epo_group]
 # add portion suggestions by group 
 Y_food_aut <- merge(Y_food_aut, epo_diet[,.(epo_group, epo_port_day = `portions/day`)], by = "epo_group", all.x = TRUE, sort = FALSE)
 #Y_food_aut[, (c("epo_group_port_sum","portions_day")) := replace(.SD, is.na(.SD), 0), .SDcols = c("epo_group_port_sum","portions_day")]
-Y_food_aut[, `:=`(epo_g_pc_day_net = ifelse(is.finite(epo_port_day), food_g_pc_day_net*epo_port_day/epo_group_port_sum, food_g_pc_day_net),
-                  epo_kcal_pc_day_net = ifelse(is.finite(epo_port_day), food_kcal_pc_day_net*epo_port_day/epo_group_port_sum, food_kcal_pc_day_net))
+Y_food_aut[, epo_rescaler := ifelse(is.finite(epo_port_day), (epo_port_day/epo_group_port_sum), 1)]
+#Y_food_aut[, `:=`(epo_g_pc_day_net = ifelse(is.finite(epo_port_day), food_g_pc_day_net*epo_port_day/epo_group_port_sum, food_g_pc_day_net),
+#                  epo_kcal_pc_day_net = ifelse(is.finite(epo_port_day), food_kcal_pc_day_net*epo_port_day/epo_group_port_sum, food_kcal_pc_day_net))
+#           ]
+Y_food_aut[, `:=`(epo_g_pc_day_net = food_g_pc_day_net*epo_rescaler,
+                  epo_kcal_pc_day_net = food_kcal_pc_day_net*epo_rescaler,
+                  epo_prot_pc_day_net = food_prot_pc_day_net*epo_rescaler,
+                  epo_fat_pc_day_net = food_fat_pc_day_net*epo_rescaler,
+                  epo_port_pc_day_net = food_port_pc_day_net*epo_rescaler)
            ]
-Y_food_aut[, epo_prot_pc_day_net := epo_g_pc_day_net*prot_g]
-Y_food_aut[, epo_fat_pc_day_net := epo_g_pc_day_net*fat_g]
+
+#Y_food_aut[, epo_kcal_pc_day_net := epo_g_pc_day_net*(1/(1-loss))*kcal_g]
+#Y_food_aut[, epo_prot_pc_day_net := epo_g_pc_day_net*(1/(1-loss))*prot_g]
+#Y_food_aut[, epo_fat_pc_day_net := epo_g_pc_day_net*(1/(1-loss))*fat_g]
 
 # NOTE: items without portion recommendation (alcohol, coffee & tea) are kept at their status quo level here as well!
 
 
 # transform net consumption values per day and capita into loss- and waste-inclusive per-capita values per year
-Y_food_aut[, eat_g_pc := eat_g_pc_day_net * (1/(1-waste_fin-loss)) * 365]
-Y_food_aut[, epo_g_pc := epo_g_pc_day_net * (1/(1-waste_fin-loss)) * 365]
+Y_food_aut[, eat_g_pc := eat_g_pc_day_net * (1/(1-waste_fin)) * (1/(1-loss)) * 365]
+Y_food_aut[, epo_g_pc := epo_g_pc_day_net * (1/(1-waste_fin)) * (1/(1-loss)) * 365]
 
 Y_food_aut[, food_t_pc := food_g_pc * 1e-6]
 Y_food_aut[, eat_t_pc := eat_g_pc * 1e-6]
