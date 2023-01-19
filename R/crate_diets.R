@@ -8,7 +8,8 @@ library(Matrix)
 # load data ---------------------------------------
 
 # select fabio version
-vers <- "1.1" # or "1.2"
+vers <- "1.2" # or "1.2"
+yr <- 2020
 
 if (vers == "1.1"){
   eat_conc <- as.data.table(readxl::read_excel("inst/items_conc.xlsx", sheet = "concordance_1.1", na = "NA"))
@@ -22,7 +23,7 @@ if (vers == "1.1"){
   cbs_pop <- readRDS("data/v1.1/cbs_pop.rds")
   Y <- readRDS("/mnt/nfs_fineprint/tmp/fabio/v1.1/losses/Y.rds")
   io_codes <- fread("/mnt/nfs_fineprint/tmp/fabio/v1.1/io_codes.csv")
-  yr = 2013
+
 } else {
   eat_conc <- as.data.table(readxl::read_excel("inst/items_conc.xlsx", sheet = "concordance", na = "NA"))
   eat_diet <- as.data.table(readxl::read_excel("inst/items_conc.xlsx", sheet = "eat_diet", skip = 1, na = "NA"))
@@ -35,7 +36,6 @@ if (vers == "1.1"){
   cbs_pop <- readRDS("data/v1.2/cbs_pop.rds")
   Y <- readRDS("/mnt/nfs_fineprint/tmp/fabio/v1.2/losses/Y.rds") # "~/fabio/v1.2/losses/Y.rds" 
   io_codes <- read.csv("/mnt/nfs_fineprint/tmp/fabio/v1.2/io_codes.csv") #  "~/fabio/v1.2/io_codes.csv"
-  yr = 2013
 }
 
 
@@ -44,6 +44,18 @@ is.finite.data.frame <- function(x) do.call(cbind, lapply(x, is.finite))
 
 # prepare caloric content data from food balances ------------------------------------------
 
+# add remaining processing use to food consumption for selected items in v1.2
+
+if (vers == "1.2") {
+  # for 
+  # - milk: 2848
+  # - cocoa: 2633
+  # - animal fats: 2737
+  # - coconut oil: 2578
+  proc_items <- c(2848, 2633, 2737, 2578)
+  cbs[item_code %in% proc_items,  `:=`(food = food_all, food_kg_pc_yr = food_all_kg_pc_yr)]
+}
+
 # extract relevant cbs columns
 cbs_food <- cbs[,.(area_code, area, item_code, item, year, food, food_kg_pc_yr, food_kcal_pc_day, fat_g_pc_day, prot_g_pc_day)]
 
@@ -51,6 +63,13 @@ cbs_food <- cbs[,.(area_code, area, item_code, item, year, food, food_kg_pc_yr, 
 cbs_food[item == "Vegetables, other", item := "Vegetables, Other"]
 cbs_food[item == "Fruits, other", item := "Fruits, Other"]
 
+# for v1.1, transform Sugar Raw into Sugar refined, as Sugar Refined is no longer in the data(?)
+if (vers == "1.1"){
+  cbs_food[item_code == 2542, c("food", "food_kg_pc_yr") := lapply(.SD, function(x) x *  0.935), 
+           .SDcols = c("food", "food_kg_pc_yr")]
+  cbs_food[item_code == 2542, `:=`(item_code = 2818, item = "Sugar, Refined Equiv")]
+  
+}
 
 # calculate energy/protein/fat content per gram of food for each country and year
 cbs_food[,food_g_pc_day := food_kg_pc_yr/365*1000]
@@ -58,13 +77,19 @@ cbs_food[, `:=`(kcal_g = food_kcal_pc_day/food_g_pc_day,
                 fat_g = fat_g_pc_day/food_g_pc_day,
                 prot_g = prot_g_pc_day/food_g_pc_day)]
 
-# for items with (some) positive consumption but zero calories, replace values by FAO global average
+# for items with (some) positive consumption but zero or very low calories, replace values by FAO global average (to avoid rounding errors)
 cbs_food <- merge(cbs_food, fao_comp[,.(item_code, kcal_data, prot_data, fat_data)], by = c("item_code"), sort = FALSE)
-cbs_food[food > 0 & food_kcal_pc_day < 5, kcal_g := kcal_data] # threshhold value for inaccuracies: 5 kcal pc/day
+cbs_food[food > 0 & food_kcal_pc_day < 5, kcal_g := kcal_data] # threshold value for inaccuracies: 5 kcal pc/day
 cbs_food[food > 0 & fat_g_pc_day < 5, prot_g := prot_data]
 cbs_food[food > 0 & prot_g_pc_day < 5, fat_g := fat_data]
 cbs_food[, `:=` (kcal_data = NULL, prot_data=NULL, fat_data = NULL)]
+# for cases with zero nutrient consumption but some positive consumption, correct nutrient consumption
+cbs_food[food_g_pc_day > 0 & food_kcal_pc_day == 0, food_kcal_pc_day := food_g_pc_day*kcal_g]
+cbs_food[food_g_pc_day > 0 & fat_g_pc_day == 0, fat_g_pc_day := food_g_pc_day*fat_g]
+cbs_food[food_g_pc_day > 0 & prot_g_pc_day == 0, prot_g_pc_day := food_g_pc_day*prot_g]
 cbs_food <- cbs_food %>% mutate(across(c(kcal_g,prot_g,fat_g),  ~replace(., !is.finite(.), 0))) # tidyr::replace_na(cbs_food, list(kcal_g=0, fat_g=0, prot_g = 0))
+
+# add concordance
 cbs_food <- merge(cbs_food, eat_conc, by = c("item_code", "item"), sort = FALSE)
 
 cbs_food <- relocate(cbs_food, c(comm_group:comm_code), .after = item) %>%
@@ -74,13 +99,21 @@ setkey(cbs_food, area_code, comm_code, year)
 
 # extract Austrian fbs for year of analysis
 cbs_food_aut <- cbs_food[area == "Austria" & year == yr,]
-
+saveRDS(cbs_food_aut, paste0("data/v",vers,"/cbs_food_aut_",yr,".rds"))
 
 # prepare final demand: ----------------------------------------------------------
 
 # extract Austrian food vector
 Y_food_aut <- as.vector(Y[[paste(yr)]][,"11_food"])
 Y_food_aut <- as.data.table(cbind(io_codes, "food_t" = Y_food_aut))
+
+# for 1.2. add processing of relevant items to food
+if(vers == "1.2"){
+  Y_food_aut[,proc_t := as.vector(Y[[paste(yr)]][,"11_processing"])]
+  Y_food_aut[item_code %in% proc_items, food_t := food_t + proc_t]
+  Y_food_aut[, proc_t := NULL]
+}
+
 setkey(Y_food_aut, area_code, comm_code)
 
 # compute consumption in grams per capita and per day
@@ -170,7 +203,7 @@ Y_food_aut <- setnafill(Y_food_aut, fill = 0, cols = c("eat_kcal_pc_day_net", "e
 # the eat diet is by definition normalized to 2500 kcal per day (excluding "Other" food items)
 
 
-### Nutrition pyramid: compute portions per pyramid group and day ---------
+### Ernährungspyramide Österreich (EPO): compute portions per pyramid group and day ---------
 Y_food_aut[, epo_group_port_sum := sum(food_port_pc_day_net), by = epo_group]
 # add portion suggestions by group 
 Y_food_aut <- merge(Y_food_aut, epo_diet[,.(epo_group, epo_port_day = `portions/day`)], by = "epo_group", all.x = TRUE, sort = FALSE)

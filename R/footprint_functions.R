@@ -21,7 +21,7 @@
 # year = the year of interest
 
 footprint <- function(country = "AUT", consumption = "food", allocation = "value", 
-                      year = 2013, y, X = X, E = E, v = vers, index, 
+                      year, y, X = X, E = E, v = vers, index, 
                       take.result = FALSE, result.dir = "data", result.suffix = ""){
 
   # extract data
@@ -377,7 +377,7 @@ fp_mosaic <- function(fp, indicator, per_captia = FALSE, consumer_country = "AUT
                    "ghg" = expression(paste("THG-Emissionen in kg ", CO[2],"-Äq.")), 
                    "luh" = expression(paste("THG-Emissionen in kg ", CO[2],"-Äq.")), 
                    "ghg_all" = expression(paste("THG-Emissionen in kg ", CO[2],"-Äq.")),
-                   "biodiv" = expression(paste("Biodiversitätsverlust in ", 10^-10, " Arten/Jahr")), 
+                   "biodiv" = expression(paste("Biodiversitätsverlust in ", 10^-14, " Arten/Jahr")), 
                    "n_application" = "Stickstoffeinsatz in g", 
                    "p_application" = "Phosphoreinsatz in g")
   } else if (lang == "en") {
@@ -398,7 +398,7 @@ fp_mosaic <- function(fp, indicator, per_captia = FALSE, consumer_country = "AUT
                    "ghg" = expression(paste("GHG emissions in kg ", CO[2]," eq.")), 
                    "luh" = expression(paste("GHG emissions in kg ", CO[2]," eq.")), 
                    "ghg_all" = expression(paste("GHG emissions in kg ", CO[2]," eq.")),
-                   "biodiv" = expression(paste("Biodiversity loss in ", 10^-10, " species/year")), 
+                   "biodiv" = expression(paste("Biodiversity loss in ", 10^-14, " species/year")), 
                    "n_application" = "Nitrogen use in g", 
                    "p_application" = "Phosphorous use in g")
   }
@@ -521,7 +521,7 @@ stacked_data <- function(fp_list, indicator = "landuse", per_capita = FALSE,
                          aggregate_by =  c("comm_group_plot")){
   
   # aggregate footprints by consumer item and combine to table with diets in columns
-  diet_labs = c("sq" = "Status \nQuo", "eat" =  "Planetary \nHealth", "epo" = "Ernährungs-\npyramide")
+  diet_labs = c("sq" = "Status \nQuo", "eat" =  "Planetary \nHealth", "epo" = "Ernährungs-\npyramide", "epo2" = "Ernährungs-\npyramide 2.0")
   fp_agg_long <- lapply(names(fp_list), function(fp){
     if (indicator == "landuse") fp_list[[fp]] <- fp_list[[fp]][group_origin != "Grazing",]
     tab <- fp_aggregate(fp_list[[fp]], aggregate_by = "comm_group_plot", indicators = indicator) %>%
@@ -589,10 +589,10 @@ stacked_bars_ghg <- function(fp, ind_list = c("ghg_pb", "ghg_energy", "luh"), mu
                                 reverse_legend = TRUE){
   
   if(lang == "de") ind_labs <- c("ghg_pb" = "Landwirtschaft", 
-                                 "ghg_energy" = "Energie", 
+                                 "ghg_energy" = "Energieverbrauch in der Landwirtschaft", 
                                  "ghg_live" = "Tierhaltung",
                                  "luh" = "Landnutzungsänderung",
-                                  "ghg_other" = "andere")
+                                  "ghg_other" = "andere Emissionen in der Landwirtschaft")
   if(lang == "en") ind_labs <- c("ghg_pb" = "Agriculture", 
                                  "ghg_energy" = "Energy",  
                                  "ghg_live" = "Animal husbandry",
@@ -820,7 +820,7 @@ circle_plot_grad <- function(fp_table, diet, ylim.max = 4, ylim.min = 0, log = F
   fp_circle_scen_exp <- fp_circle_scen %>%
      rowwise() %>%
     summarise(ind = ind,
-              value = list(seq(value,0, by = -0.01))) %>%
+              value = list(seq(value,ylim.min, by = -0.01))) %>% # seq(value,0, by = -0.01)
     unnest(cols = value)
   
   plt <- ggplot(fp_circle_scen_exp) +
@@ -1218,7 +1218,7 @@ spiderweb <- function(plot.data,
 
 
 dietshift_cond <- function(Y_food_dt = Y_food_aut, cond.var = "landuse", cond.reg = "AUT", diet.name, diet.suffix = "cond", 
-                           rescale.var, rescale.group, fp_sq = fp_sq, x = X[,"2013"], skip.groups = NULL,
+                           rescale.var, rescale.group, fp_sq = fp_sq, x = X[,"2013"], skip.groups = NULL, tol = 1e-3,
                            add.newcols = FALSE){
   
   if(missing(cond.var)) stop("cond.var has to be specified")
@@ -1282,7 +1282,7 @@ dietshift_cond <- function(Y_food_dt = Y_food_aut, cond.var = "landuse", cond.re
     rescaler_cond = sum(get(paste0(diet.name,"_",diet.suffix,"_t_pc")))/sum(food_t_pc)),
     by = c(rescale.group)]
   
-  if(all.equal(rescalers_by_group$rescaler, rescalers_by_group$rescaler_cond, tolerance = 1e-3) != TRUE) stop("Group-wise rescaling factors are not the same at mean relative tolerance of 1e-3. Check for correct rescale.group and function correctness")
+  if(all.equal(rescalers_by_group$rescaler, rescalers_by_group$rescaler_cond, tolerance = tol) != TRUE) stop("Group-wise rescaling factors are not the same at mean relative tolerance of 1e-3. Check for correct rescale.group and function correctness")
   
   
   # check if increased demand for domestic goods keeps conditional indicator (.e.g landuse) within the target region within status quo level -------
@@ -1334,18 +1334,32 @@ dietshift_cond <- function(Y_food_dt = Y_food_aut, cond.var = "landuse", cond.re
 
 
 # check domestic vs imported shares per product 
-get_sources <- function(Y_food_dt, reg = "AUT", diet, var, group, area.var = "area_iso"){
+#get_sources <- function(Y_food_dt, reg = "AUT", diet, var, group, area.var = "area_iso", mult.fact = 1){
+#
+#  if(diet == "sq") diet <- "food"
+#  
+#    Y_food_dt <- copy(Y_food_dt)[,.(dom_group_sum = sum(get(paste0(diet,"_",var))[get(area.var) == reg])*mult.fact,
+#                                  for_group_sum = sum(get(paste0(diet,"_",var))[get(area.var) != reg])*mult.fact,
+#                                  group_sum = sum(get(paste0(diet,"_",var))*mult.fact)
+#                          ), by = c(group)]
+#    
+#    Y_food_dt[, `:=` (dom_group_share = dom_group_sum/group_sum,
+#                      for_group_share = for_group_sum/group_sum)]
+#  
+#}
 
-  if(diet == "sq") diet <- "food"
+
+get_sources <- function(Y_food_dt, reg = "AUT", var, group, area.var = "area_iso", mult.fact = 1){
   
-    Y_food_dt <- Y_food_dt[,`:=` (dom_group_sum = sum(get(paste0(diet,"_",var))[get(area.var) == reg]),
-                                  for_group_sum = sum(get(paste0(diet,"_",var))[get(area.var) != cond.reg]),
-                                  group_sum = sum(get(paste0(diet,"_",var)))
-                          ), by = c(rescale.group)]
-    
-    Y_food_dt[, `:=` (dom_group_share = dom_group_sum/group_sum)]
+  #if(diet == "sq") diet <- "food"
+  
+  Y_food_dt <- copy(Y_food_dt)[,.(dom_group_sum = sum(get(var)[get(area.var) == reg])*mult.fact,
+                                  for_group_sum = sum(get(var)[get(area.var) != reg])*mult.fact,
+                                  group_sum = sum(get(var)*mult.fact)
+  ), by = c(group)]
+  
+  Y_food_dt[, `:=` (dom_group_share = dom_group_sum/group_sum,
+                    for_group_share = for_group_sum/group_sum)]
   
 }
-
-
 

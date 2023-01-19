@@ -175,6 +175,6 @@ cbs[, balancing := na_sum(total_supply,
 # TODO: imbalances in the data need to be double-checked! there are a lot of them!
 
 # Store
-saveRDS(cbs, "data/tidy/cbs_tidy_food_v1.1.rds")
-saveRDS(cbs_pop, "data/tidy/cbs_pop_v.1.1.rds")
+saveRDS(cbs, "data/v1.1/cbs_tidy_food.rds")
+saveRDS(cbs_pop, "data/v1.1/cbs_pop.rds")
 
